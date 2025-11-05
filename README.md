@@ -22,25 +22,98 @@ pip install -e .
 
 ## Authentication
 
-Create a `.env` file in your project root with your Podio credentials:
+Podio CLI supports multiple authentication methods. Choose the one that best fits your use case:
+
+### 1. Client-Side Token Authentication (Simplest + Auto-Refresh)
+
+Use an existing access token directly with automatic token refresh. Best for testing, automation, and AI agents.
+
+```bash
+# Direct token authentication with auto-refresh
+PODIO_ACCESS_TOKEN=your_access_token
+PODIO_REFRESH_TOKEN=your_refresh_token
+PODIO_CLIENT_ID=your_client_id  # Required for auto-refresh
+PODIO_CLIENT_SECRET=your_client_secret  # Required for auto-refresh
+```
+
+**Getting a token:**
+```bash
+# Generate authorization URL
+podio auth url --flow client --redirect-uri http://localhost
+
+# Visit the URL, authorize, and parse the callback
+podio auth parse-callback "http://localhost#access_token=TOKEN&refresh_token=REFRESH"
+```
+
+**Automatic Token Refresh:**
+- When the access token expires (after 8 hours), the CLI automatically refreshes it
+- Uses the refresh token to get a new access token
+- Retries failed requests automatically after refresh
+- No manual intervention needed!
+
+**Reference:** [Podio Client-Side Authentication](https://developers.podio.com/authentication/client_side)
+
+### 2. Server-Side Authorization Code Flow (Most Secure)
+
+OAuth 2.0 authorization code flow. Best for web applications that act on behalf of users.
 
 ```bash
 # OAuth Client Credentials (required)
 PODIO_CLIENT_ID=your_client_id
 PODIO_CLIENT_SECRET=your_client_secret
 
-# User Authentication (recommended for multiple apps)
+# Authorization Code Flow
+PODIO_AUTHORIZATION_CODE=received_code
+PODIO_REDIRECT_URI=https://your-app.com/callback
+```
+
+**Getting an authorization code:**
+```bash
+# Generate authorization URL
+podio auth url --flow server --redirect-uri https://your-app.com/callback
+
+# Visit the URL, authorize, and parse the callback
+podio auth parse-callback "https://your-app.com/callback?code=AUTHORIZATION_CODE"
+```
+
+**Reference:** [Podio Server-Side Authentication](https://developers.podio.com/authentication/server_side)
+
+### 3. Username & Password Flow (For Personal Scripts)
+
+Direct username/password authentication. Best for personal automation scripts.
+
+```bash
+# OAuth Client Credentials (required)
+PODIO_CLIENT_ID=your_client_id
+PODIO_CLIENT_SECRET=your_client_secret
+
+# User Authentication
 PODIO_USERNAME=your_email@example.com
 PODIO_PASSWORD=your_password
+```
 
-# Optional: Default IDs
+### 4. App Authentication (Single App Access)
+
+Authenticate as a specific app. Best for automation limited to one app.
+
+```bash
+# OAuth Client Credentials (required)
+PODIO_CLIENT_ID=your_client_id
+PODIO_CLIENT_SECRET=your_client_secret
+
+# App Authentication
+PODIO_APP_ID=your_app_id
+PODIO_APP_TOKEN=your_app_token
+```
+
+### Optional: Default IDs
+
+Set default organization and workspace IDs to avoid specifying them in every command:
+
+```bash
 PODIO_ORGANIZATION_ID=your_default_org_id
 PODIO_WORKSPACE_ID=your_default_space_id
 ```
-
-### Default Organization and Workspace
-
-Set `PODIO_ORGANIZATION_ID` and `PODIO_WORKSPACE_ID` to avoid specifying IDs in every command. When set, commands that require these IDs will use the default values if not explicitly provided.
 
 ### Getting OAuth Credentials
 
@@ -48,6 +121,20 @@ Set `PODIO_ORGANIZATION_ID` and `PODIO_WORKSPACE_ID` to avoid specifying IDs in 
 2. Go to Account Settings → API Keys (https://podio.com/settings/api)
 3. Create a new OAuth client or use an existing one
 4. Copy the Client ID and Client Secret to your `.env` file
+
+### Authentication Command Reference
+
+```bash
+# Generate OAuth authorization URL (server-side flow)
+podio auth url --flow server --redirect-uri https://your-app.com/callback
+
+# Generate OAuth authorization URL (client-side flow)
+podio auth url --flow client --redirect-uri https://your-app.com/callback
+
+# Parse callback URL to extract tokens/codes
+podio auth parse-callback "https://your-app.com/callback?code=..."
+podio auth parse-callback "https://your-app.com/callback#access_token=..."
+```
 
 ## Usage
 
@@ -392,10 +479,17 @@ podio --install-completion fish
 
 ### Configuration
 
-The CLI automatically loads credentials from `.env` in:
-1. Current directory
-2. Parent directory
-3. Default system location
+Create a `.env` file at `~/.podio/.env` with your credentials:
+
+```bash
+mkdir -p ~/.podio
+nano ~/.podio/.env  # Or use your preferred editor
+```
+
+The CLI automatically loads credentials from `.env` in this order:
+1. `~/.podio/.env` (recommended global configuration)
+2. Current directory (for local testing/overrides)
+3. Parent directory (for local testing/overrides)
 
 You can also set environment variables directly:
 

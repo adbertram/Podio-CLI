@@ -41,6 +41,10 @@ def get_client() -> api.OAuthClient:
         for cred in missing:
             error_msg += f"  - {cred}\n"
 
+        error_msg += "\nFor client-side token authentication (use existing token):\n"
+        error_msg += "  PODIO_ACCESS_TOKEN (optional: PODIO_REFRESH_TOKEN)\n"
+        error_msg += "\nFor server-side authorization code flow (most secure):\n"
+        error_msg += "  PODIO_CLIENT_ID, PODIO_CLIENT_SECRET, PODIO_AUTHORIZATION_CODE, PODIO_REDIRECT_URI\n"
         error_msg += "\nFor user authentication (recommended for multiple apps):\n"
         error_msg += "  PODIO_CLIENT_ID, PODIO_CLIENT_SECRET, PODIO_USERNAME, PODIO_PASSWORD\n"
         error_msg += "\nFor app authentication (single app only):\n"
@@ -48,7 +52,33 @@ def get_client() -> api.OAuthClient:
 
         raise ClientError(error_msg)
 
-    # Try user authentication first (preferred for multi-app access)
+    # Try token authentication first (simplest, no extra round trip)
+    if config.has_token_auth():
+        try:
+            _client = api.OAuthTokenClient(
+                access_token=config.access_token,
+                refresh_token=config.refresh_token,
+                client_id=config.client_id,  # Pass for token refresh capability
+                client_secret=config.client_secret  # Pass for token refresh capability
+            )
+            return _client
+        except Exception as e:
+            raise ClientError(f"Failed to authenticate with access token: {e}")
+
+    # Try authorization code flow (most secure for web apps)
+    if config.has_authorization_code_auth():
+        try:
+            _client = api.OAuthAuthorizationCodeClient(
+                client_id=config.client_id,
+                client_secret=config.client_secret,
+                authorization_code=config.authorization_code,
+                redirect_uri=config.redirect_uri
+            )
+            return _client
+        except Exception as e:
+            raise ClientError(f"Failed to authenticate with authorization code: {e}")
+    
+    # Try user authentication (preferred for multi-app access)
     if config.has_user_auth():
         try:
             _client = api.OAuthClient(

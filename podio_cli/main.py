@@ -17,12 +17,13 @@ app = typer.Typer(
 # Import and register command modules
 # These will be imported as they're created
 try:
-    from .commands import item, app as app_cmd, task, space, org
+    from .commands import item, app as app_cmd, task, space, org, auth
     app.add_typer(item.app, name="item", help="Manage Podio items")
     app.add_typer(app_cmd.app, name="app", help="Manage Podio applications")
     app.add_typer(task.app, name="task", help="Manage Podio tasks")
     app.add_typer(space.app, name="space", help="Manage Podio spaces")
     app.add_typer(org.app, name="org", help="Manage Podio organizations")
+    app.add_typer(auth.app, name="auth", help="OAuth authentication utilities")
 except ImportError:
     # Commands not yet implemented - will add as we build them
     pass
