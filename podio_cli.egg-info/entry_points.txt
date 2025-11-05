@@ -1,0 +1,2 @@
+[console_scripts]
+podio = podio_cli.main:app

@@ -1,0 +1,514 @@
+# Podio CLI
+
+A command-line interface for the Podio API built with Python and Typer. Automate and manage your Podio workspace from the terminal.
+
+## Features
+
+- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces)
+- **JSON output** - Perfect for scripting and automation
+- **Environment-based authentication** - Secure credential management via .env
+- **Comprehensive coverage** - Support for items, apps, tasks, and spaces
+- **Stdin/stdout support** - Easy integration with bash pipelines
+
+## Installation
+
+```bash
+# Clone or navigate to the pypodio-cli directory
+cd pypodio-cli
+
+# Install in development mode
+pip install -e .
+```
+
+## Authentication
+
+Create a `.env` file in your project root with your Podio credentials:
+
+```bash
+# OAuth Client Credentials (required)
+PODIO_CLIENT_ID=your_client_id
+PODIO_CLIENT_SECRET=your_client_secret
+
+# User Authentication (recommended for multiple apps)
+PODIO_USERNAME=your_email@example.com
+PODIO_PASSWORD=your_password
+
+# Optional: Default IDs
+PODIO_ORGANIZATION_ID=your_default_org_id
+PODIO_WORKSPACE_ID=your_default_space_id
+```
+
+### Default Organization and Workspace
+
+Set `PODIO_ORGANIZATION_ID` and `PODIO_WORKSPACE_ID` to avoid specifying IDs in every command. When set, commands that require these IDs will use the default values if not explicitly provided.
+
+### Getting OAuth Credentials
+
+1. Log in to Podio at https://podio.com
+2. Go to Account Settings → API Keys (https://podio.com/settings/api)
+3. Create a new OAuth client or use an existing one
+4. Copy the Client ID and Client Secret to your `.env` file
+
+## Usage
+
+### General Syntax
+
+```bash
+podio <resource> <action> [arguments] [options]
+```
+
+### Available Commands
+
+```bash
+podio --help                    # Show all available commands
+podio <resource> --help         # Show help for specific resource
+podio <resource> <action> --help # Show help for specific action
+```
+
+## Command Reference
+
+### Organization Commands
+
+Manage Podio organizations.
+
+```bash
+# List all organizations you're a member of
+podio org list
+```
+
+**Examples:**
+```bash
+# List all organizations (includes org_id and spaces)
+podio org list
+```
+
+**Finding your Organization ID and Space ID:**
+
+Run `podio org list` to see all your organizations with their `org_id` values and associated spaces with `space_id` values. You can then add these to your `.env` file as `PODIO_ORGANIZATION_ID` and `PODIO_WORKSPACE_ID`.
+
+### App Commands
+
+Manage Podio applications.
+
+```bash
+# Get application details
+podio app get <app_id>
+
+# List all apps in a space
+podio app list [--space-id <space_id>]  # Uses PODIO_WORKSPACE_ID if not provided
+
+# Get all items from an app
+podio app items <app_id> [--limit 30] [--offset 0]
+
+# Activate an app
+podio app activate <app_id>
+
+# Deactivate an app
+podio app deactivate <app_id>
+```
+
+**Examples:**
+```bash
+# Get details of app 30529466
+podio app get 30529466
+
+# List all apps in space 10479826
+podio app list --space-id 10479826
+podio app list -s 10479826  # Short form
+
+# List all apps in default workspace (uses PODIO_WORKSPACE_ID)
+podio app list
+
+# Get first 100 items from an app
+podio app items 30529466 --limit 100
+```
+
+### Item Commands
+
+Manage Podio items (create, read, update, delete).
+
+```bash
+# Get a single item
+podio item get <item_id> [--basic]
+
+# Filter items in an app
+podio item filter <app_id> [--filters '{"status": "active"}'] [--limit 30] [--offset 0] [--sort-by field] [--desc]
+
+# Create a new item
+podio item create <app_id> [--json-file file.json] [--silent] [--no-hook]
+
+# Update an item
+podio item update <item_id> [--json-file file.json] [--silent] [--no-hook]
+
+# Delete an item
+podio item delete <item_id> [--silent] [--no-hook]
+
+# Get item field values
+podio item values <item_id>
+```
+
+**Examples:**
+```bash
+# Get item with basic info
+podio item get 12345 --basic
+
+# Filter active items
+podio item filter 30529466 --filters '{"status": "active"}' --limit 50
+
+# Create item from JSON file
+podio item create 30529466 --json-file new_article.json
+
+# Create item from stdin (pipe)
+echo '{"fields": [{"external_id": "title", "values": [{"value": "Test"}]}]}' | podio item create 30529466
+
+# Update item silently (no notifications)
+podio item update 12345 --json-file update.json --silent
+
+# Delete item without triggering webhooks
+podio item delete 12345 --no-hook
+```
+
+**Item Data Format:**
+
+For create/update operations, use this JSON structure:
+
+```json
+{
+  "fields": [
+    {
+      "external_id": "title",
+      "values": [{"value": "Item Title"}]
+    },
+    {
+      "external_id": "status",
+      "values": [{"value": "active"}]
+    }
+  ]
+}
+```
+
+### Task Commands
+
+Manage Podio tasks.
+
+```bash
+# Get a task
+podio task get <task_id>
+
+# Create a task
+podio task create [--json-file file.json] [--text "description"] [--ref-type item] [--ref-id 12345] [--due-date 2025-01-15] [--private]
+
+# Update a task
+podio task update <task_id> [--json-file file.json] [--text "new text"] [--due-date 2025-01-20]
+
+# Complete a task
+podio task complete <task_id>
+
+# Delete a task
+podio task delete <task_id>
+```
+
+**Examples:**
+```bash
+# Create task from command-line options
+podio task create --text "Follow up with client" --ref-type item --ref-id 12345 --due-date 2025-01-15
+
+# Create task from JSON file
+podio task create --json-file task.json
+
+# Create task from stdin
+cat task.json | podio task create
+
+# Complete a task
+podio task complete 99999
+
+# Update task text
+podio task update 99999 --text "Updated description"
+```
+
+**Task Data Format:**
+
+```json
+{
+  "text": "Task description",
+  "description": "Detailed description",
+  "due_date": "2025-01-15",
+  "private": false,
+  "ref_type": "item",
+  "ref_id": 12345
+}
+```
+
+### Space Commands
+
+Manage Podio spaces (workspaces).
+
+```bash
+# Get space details
+podio space get [--space-id <space_id>]  # Uses PODIO_WORKSPACE_ID if not provided
+
+# List all spaces in an organization
+podio space list [--org-id <org_id>]  # Uses PODIO_ORGANIZATION_ID if not provided
+
+# Find space by URL
+podio space find-by-url <space_url>
+```
+
+**Examples:**
+```bash
+# Get space details
+podio space get --space-id 10479826
+podio space get -s 10479826  # Short form
+
+# Get default workspace details (uses PODIO_WORKSPACE_ID)
+podio space get
+
+# List all spaces in organization
+podio space list --org-id 3747840
+podio space list -o 3747840  # Short form
+
+# List all spaces in default organization (uses PODIO_ORGANIZATION_ID)
+podio space list
+
+# Find space by URL
+podio space find-by-url https://podio.com/ata-learning-llc/progress-content-management
+```
+
+## Automation Examples
+
+### Scripting with JSON Output
+
+All commands output JSON by default, making them perfect for automation:
+
+```bash
+# Get all apps and extract their IDs
+podio app list 10479826 | jq '.[].app_id'
+
+# Count items in an app
+podio item filter 30529466 | jq '.total'
+
+# Get all active items
+podio item filter 30529466 --filters '{"status": "active"}' > active_items.json
+
+# Process items in a loop
+for item_id in $(podio item filter 30529466 | jq -r '.items[].item_id'); do
+  podio item get $item_id
+done
+```
+
+### Batch Operations
+
+```bash
+# Create multiple items from individual JSON files
+for file in items/*.json; do
+  podio item create 30529466 --json-file "$file"
+done
+
+# Update multiple items
+cat item_updates.json | while read update; do
+  echo "$update" | podio item update 12345
+done
+```
+
+### Exit Codes
+
+The CLI uses standard exit codes for automation:
+
+- `0` - Success
+- `1` - General error (API error, not found, etc.)
+- `2` - Authentication error
+- `130` - Interrupted (Ctrl+C)
+
+```bash
+# Check if command succeeded
+if podio item get 12345 > /dev/null 2>&1; then
+  echo "Item exists"
+else
+  echo "Item not found or error occurred"
+fi
+```
+
+## Output Format
+
+All commands output JSON to stdout, while status messages and errors go to stderr. This keeps stdout clean for piping:
+
+```bash
+# Success message goes to stderr, JSON to stdout
+podio item create 30529466 --json-file item.json
+# stderr: ✓ Item created successfully
+# stdout: {"item_id": 12345, ...}
+
+# Pipe JSON output without seeing status messages
+podio app list 10479826 | jq '.[].name'
+```
+
+## Error Handling
+
+The CLI provides clear error messages:
+
+```bash
+# Authentication error
+Error: Authentication failed. Please check your credentials in .env file.
+
+# Resource not found
+Error: Resource not found.
+
+# Invalid request
+Error: Invalid request: Field 'title' is required
+
+# Rate limit
+Error: Rate limit exceeded. Please try again later.
+```
+
+## Advanced Usage
+
+### Global Options
+
+```bash
+# Show version
+podio --version
+
+# Install shell completion
+podio --install-completion
+
+# Show completion for current shell
+podio --show-completion
+```
+
+### Shell Completion
+
+Enable auto-completion for your shell:
+
+```bash
+# Bash
+podio --install-completion bash
+
+# Zsh
+podio --install-completion zsh
+
+# Fish
+podio --install-completion fish
+```
+
+### Configuration
+
+The CLI automatically loads credentials from `.env` in:
+1. Current directory
+2. Parent directory
+3. Default system location
+
+You can also set environment variables directly:
+
+```bash
+export PODIO_CLIENT_ID=your_id
+export PODIO_CLIENT_SECRET=your_secret
+export PODIO_USERNAME=your_email
+export PODIO_PASSWORD=your_password
+
+podio app list 10479826
+```
+
+## Development
+
+### Project Structure
+
+```
+pypodio-cli/
+├── podio_cli/
+│   ├── __init__.py
+│   ├── main.py              # Entry point
+│   ├── config.py            # Configuration management
+│   ├── client.py            # Podio client wrapper
+│   ├── output.py            # Output formatting
+│   └── commands/            # Command modules
+│       ├── __init__.py
+│       ├── app.py           # Application commands
+│       ├── item.py          # Item commands
+│       ├── task.py          # Task commands
+│       └── space.py         # Space commands
+├── tests/
+├── pyproject.toml
+└── README.md
+```
+
+### Running Tests
+
+```bash
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=podio_cli
+```
+
+### Adding New Commands
+
+To add a new command module:
+
+1. Create a new file in `podio_cli/commands/`
+2. Define a Typer app and commands
+3. Import and register in `main.py`
+
+Example:
+
+```python
+# podio_cli/commands/myresource.py
+import typer
+from ..client import get_client
+from ..output import print_json, handle_api_error, format_response
+
+app = typer.Typer(help="Manage my resource")
+
+@app.command("get")
+def get_resource(resource_id: int):
+    """Get a resource by ID."""
+    try:
+        client = get_client()
+        result = client.MyResource.find(resource_id=resource_id)
+        print_json(format_response(result))
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+```
+
+Then register in `main.py`:
+
+```python
+from .commands import myresource
+app.add_typer(myresource.app, name="myresource", help="Manage my resource")
+```
+
+## Dependencies
+
+- **typer[all]** - CLI framework with rich formatting
+- **pypodio2** - Podio API wrapper
+- **python-dotenv** - Environment variable management
+
+## License
+
+MIT License
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## Support
+
+For issues and questions:
+- Check the [Podio API documentation](https://developers.podio.com/)
+- Review pypodio2 documentation
+- Open an issue on GitHub
+
+## Changelog
+
+### v0.1.0 (2025-11-04)
+
+- Initial release
+- Support for items, apps, tasks, and spaces
+- JSON output format
+- Environment-based authentication
+- Comprehensive command-line options
+- Shell completion support
