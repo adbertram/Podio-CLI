@@ -1,0 +1,12 @@
+*.pyc
+
+untitled
+test.py
+.tox
+build
+dist
+.virtualenv
+*.egg
+*.egg-info
+idea
+env
