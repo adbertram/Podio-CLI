@@ -13,6 +13,7 @@ podio_cli.egg-info/requires.txt
 podio_cli.egg-info/top_level.txt
 podio_cli/commands/__init__.py
 podio_cli/commands/app.py
+podio_cli/commands/auth.py
 podio_cli/commands/item.py
 podio_cli/commands/org.py
 podio_cli/commands/space.py

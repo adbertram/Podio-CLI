@@ -12,13 +12,25 @@ A command-line interface for the Podio API built with Python and Typer. Automate
 
 ## Installation
 
-```bash
-# Clone or navigate to the pypodio-cli directory
-cd pypodio-cli
+### Recommended: pipx (global CLI)
 
-# Install in development mode
+```bash
+brew install pipx               # or follow https://pypa.github.io/pipx/installation/
+pipx install git+https://github.com/adbertram/podio-cli.git
+```
+
+This installs an isolated virtual environment at `~/.local/pipx/venvs/podio-cli` and exposes the `podio` executable on your `PATH`. Reinstall with `pipx install --force <repo>` to pick up updates, or `pipx inject podio-cli /path/to/podio-py` if you need to override bundled dependencies.
+
+### Local development
+
+```bash
+git clone https://github.com/adbertram/podio-cli.git
+cd podio-cli
+python -m venv venv && source venv/bin/activate
 pip install -e .
 ```
+
+Use this flow when contributing changes; remember to run `pytest` from the activated environment before submitting a PR.
 
 ## Authentication
 
@@ -135,6 +147,21 @@ podio auth url --flow client --redirect-uri https://your-app.com/callback
 podio auth parse-callback "https://your-app.com/callback?code=..."
 podio auth parse-callback "https://your-app.com/callback#access_token=..."
 ```
+
+## Rate Limiting & Retries
+
+All Podio API calls are wrapped with exponential backoff. The CLI retries 429 rate-limit responses as well as 5xx server errors by default (5 attempts, 2s → 60s backoff, jitter enabled). Tune the behavior via environment variables in your `.env`:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PODIO_RETRY_MAX_ATTEMPTS` | `5` | Total retry attempts (0 disables retries) |
+| `PODIO_RETRY_BASE_DELAY` | `2.0` | Initial delay in seconds |
+| `PODIO_RETRY_MAX_DELAY` | `60.0` | Maximum delay cap in seconds |
+| `PODIO_RETRY_EXPONENTIAL_BASE` | `2.0` | Growth factor between retries (must be >1) |
+| `PODIO_RETRY_JITTER` | `true` | Randomize delays to avoid thundering herds |
+| `PODIO_RETRY_ON_RATE_LIMIT` | `true` | Disable only if you want 429s to fail immediately |
+
+Invalid values raise an error during CLI startup so you know the configuration is safe before any write operations run.
 
 ## Usage
 

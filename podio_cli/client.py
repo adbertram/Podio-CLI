@@ -30,6 +30,10 @@ def get_client() -> api.OAuthClient:
         return _client
 
     config = get_config()
+    try:
+        retry_config = config.get_retry_config()
+    except ValueError as e:
+        raise ClientError(f"Invalid retry configuration: {e}")
 
     # Check for missing credentials
     missing = config.get_missing_credentials()
@@ -55,11 +59,17 @@ def get_client() -> api.OAuthClient:
     # Try token authentication first (simplest, no extra round trip)
     if config.has_token_auth():
         try:
+            # Create a callback to persist tokens after refresh
+            def on_token_refresh(access_token, refresh_token):
+                config.save_tokens(access_token, refresh_token)
+
             _client = api.OAuthTokenClient(
                 access_token=config.access_token,
                 refresh_token=config.refresh_token,
                 client_id=config.client_id,  # Pass for token refresh capability
-                client_secret=config.client_secret  # Pass for token refresh capability
+                client_secret=config.client_secret,  # Pass for token refresh capability
+                on_token_refresh=on_token_refresh,  # Callback to persist refreshed tokens
+                retry_config=retry_config
             )
             return _client
         except Exception as e:
@@ -72,7 +82,8 @@ def get_client() -> api.OAuthClient:
                 client_id=config.client_id,
                 client_secret=config.client_secret,
                 authorization_code=config.authorization_code,
-                redirect_uri=config.redirect_uri
+                redirect_uri=config.redirect_uri,
+                retry_config=retry_config
             )
             return _client
         except Exception as e:
@@ -85,7 +96,8 @@ def get_client() -> api.OAuthClient:
                 api_key=config.client_id,
                 api_secret=config.client_secret,
                 login=config.username,
-                password=config.password
+                password=config.password,
+                retry_config=retry_config
             )
             return _client
         except Exception as e:
@@ -98,7 +110,8 @@ def get_client() -> api.OAuthClient:
                 client_id=config.client_id,
                 client_secret=config.client_secret,
                 app_id=int(config.app_id),
-                app_token=config.app_token
+                app_token=config.app_token,
+                retry_config=retry_config
             )
             return _client
         except Exception as e:

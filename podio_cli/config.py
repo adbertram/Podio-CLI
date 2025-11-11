@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
+from pypodio2 import RetryConfig
 
 
 class Config:
@@ -21,16 +22,21 @@ class Config:
             Path.cwd().parent / ".env",       # Parent directory
         ]
 
+        self.env_file_path = None
+        self._retry_config: Optional[RetryConfig] = None
         env_loaded = False
         for env_path in possible_paths:
             if env_path.exists():
                 load_dotenv(env_path, override=False)
+                self.env_file_path = env_path
                 env_loaded = True
                 break
 
         if not env_loaded:
             # Try loading from default location (checks environment variables)
             load_dotenv()
+            # Default to ~/.podio/.env for saving
+            self.env_file_path = Path.home() / ".podio" / ".env"
 
     @property
     def client_id(self) -> Optional[str]:
@@ -155,6 +161,108 @@ class Config:
             missing.append("PODIO_APP_ID + PODIO_APP_TOKEN (for app auth)")
 
         return missing
+
+    def save_tokens(self, access_token: str, refresh_token: str):
+        """
+        Save refreshed tokens to the .env file.
+
+        Args:
+            access_token: New access token
+            refresh_token: New refresh token
+        """
+        if not self.env_file_path:
+            return
+
+        # Ensure the directory exists
+        self.env_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Read existing .env file content
+        env_content = {}
+        if self.env_file_path.exists():
+            with open(self.env_file_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        env_content[key] = value
+
+        # Update tokens
+        env_content['PODIO_ACCESS_TOKEN'] = access_token
+        env_content['PODIO_REFRESH_TOKEN'] = refresh_token
+
+        # Write back to file
+        with open(self.env_file_path, 'w') as f:
+            for key, value in env_content.items():
+                f.write(f"{key}={value}\n")
+
+    def get_retry_config(self) -> RetryConfig:
+        """
+        Build (and cache) the retry configuration for outbound Podio requests.
+
+        Environment variables:
+            PODIO_RETRY_MAX_ATTEMPTS      (int >= 0, default 5)
+            PODIO_RETRY_BASE_DELAY        (float > 0, default 2.0 seconds)
+            PODIO_RETRY_MAX_DELAY         (float >= base_delay, default 60.0 seconds)
+            PODIO_RETRY_EXPONENTIAL_BASE  (float > 1, default 2.0)
+            PODIO_RETRY_JITTER            ("true"/"false", default true)
+            PODIO_RETRY_ON_RATE_LIMIT     ("true"/"false", default true)
+        """
+        if self._retry_config is not None:
+            return self._retry_config
+
+        max_retries = self._get_int_env("PODIO_RETRY_MAX_ATTEMPTS", default=5, minimum=0)
+        base_delay = self._get_float_env("PODIO_RETRY_BASE_DELAY", default=2.0, minimum=0.001)
+        max_delay = self._get_float_env("PODIO_RETRY_MAX_DELAY", default=60.0, minimum=base_delay)
+        exponential_base = self._get_float_env(
+            "PODIO_RETRY_EXPONENTIAL_BASE",
+            default=2.0,
+            minimum=1.001
+        )
+        jitter = self._get_bool_env("PODIO_RETRY_JITTER", default=True)
+        retry_on_rate_limit = self._get_bool_env("PODIO_RETRY_ON_RATE_LIMIT", default=True)
+
+        self._retry_config = RetryConfig(
+            max_retries=max_retries,
+            base_delay=base_delay,
+            max_delay=max_delay,
+            exponential_base=exponential_base,
+            jitter=jitter,
+            retry_on_rate_limit=retry_on_rate_limit
+        )
+        return self._retry_config
+
+    def _get_int_env(self, name: str, default: int, minimum: Optional[int] = None) -> int:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        try:
+            parsed = int(value)
+        except ValueError:
+            raise ValueError(f"{name} must be an integer, got {value!r}")
+        if minimum is not None and parsed < minimum:
+            raise ValueError(f"{name} must be >= {minimum}, got {parsed}")
+        return parsed
+
+    def _get_float_env(self, name: str, default: float, minimum: Optional[float] = None) -> float:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        try:
+            parsed = float(value)
+        except ValueError:
+            raise ValueError(f"{name} must be a number, got {value!r}")
+        if minimum is not None and parsed < minimum:
+            raise ValueError(f"{name} must be >= {minimum}, got {parsed}")
+        return parsed
+
+    def _get_bool_env(self, name: str, default: bool) -> bool:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        normalized = value.strip().lower()
+        if normalized not in {"true", "false"}:
+            raise ValueError(f"{name} must be either 'true' or 'false', got {value!r}")
+        return normalized == "true"
 
 
 # Global config instance
