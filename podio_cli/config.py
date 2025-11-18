@@ -11,32 +11,22 @@ class Config:
 
     def __init__(self):
         """Initialize configuration by loading from .env file."""
-        # Look for .env in these locations (in order of priority):
-        # 1. User's home directory: ~/.podio/.env
-        # 2. Current directory (for development/testing)
-        # 3. Parent directory (for development/testing)
+        # Use .env file in the Podio-CLI installation directory
+        # This is the directory containing podio_cli package
 
-        possible_paths = [
-            Path.home() / ".podio" / ".env",  # Global config
-            Path.cwd() / ".env",              # Local override
-            Path.cwd().parent / ".env",       # Parent directory
-        ]
+        # Get the directory where this config.py file is located
+        config_dir = Path(__file__).parent.parent  # Go up from podio_cli/ to Podio-CLI/
+        cli_env_path = config_dir / ".env"
 
-        self.env_file_path = None
+        self.env_file_path = cli_env_path
         self._retry_config: Optional[RetryConfig] = None
-        env_loaded = False
-        for env_path in possible_paths:
-            if env_path.exists():
-                load_dotenv(env_path, override=False)
-                self.env_file_path = env_path
-                env_loaded = True
-                break
 
-        if not env_loaded:
-            # Try loading from default location (checks environment variables)
-            load_dotenv()
-            # Default to ~/.podio/.env for saving
-            self.env_file_path = Path.home() / ".podio" / ".env"
+        if cli_env_path.exists():
+            load_dotenv(cli_env_path, override=True)
+        else:
+            # Create default .env if it doesn't exist
+            cli_env_path.parent.mkdir(parents=True, exist_ok=True)
+            cli_env_path.touch()
 
     @property
     def client_id(self) -> Optional[str]:
