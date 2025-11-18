@@ -1,0 +1,218 @@
+"""Comment commands for Podio CLI."""
+import json
+import sys
+from typing import Optional
+from pathlib import Path
+import typer
+
+from ..client import get_client
+from ..output import print_json, print_error, print_success, handle_api_error, format_response
+
+app = typer.Typer(help="Manage Podio comments")
+
+
+@app.command("create")
+def create_comment(
+    ref_type: str = typer.Argument(..., help="Object type (e.g., 'item', 'status')"),
+    ref_id: int = typer.Argument(..., help="Object ID"),
+    text: Optional[str] = typer.Option(None, "--text", help="Comment text"),
+    json_file: Optional[Path] = typer.Option(
+        None,
+        "--json-file",
+        help="Path to JSON file with comment data",
+    ),
+    silent: bool = typer.Option(False, "--silent", help="Suppress notifications"),
+    no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
+    alert_invite: bool = typer.Option(False, "--alert-invite", help="Auto-invite mentioned users"),
+):
+    """
+    Add a comment to a Podio object (item, status, etc.).
+
+    You can provide comment text directly with --text, or use a JSON file for more complex
+    comments with attachments or embeds.
+
+    Comment data format:
+        {
+            "value": "Comment text",
+            "external_id": "Optional external ID",
+            "file_ids": [123, 456],
+            "embed_id": 789,
+            "embed_url": "https://example.com"
+        }
+
+    Examples:
+        podio comment create item 12345 --text "This is a comment"
+        podio comment create item 12345 --json-file comment.json
+        podio comment create item 12345 --text "Great work!" --silent
+    """
+    try:
+        client = get_client()
+
+        # Build comment data
+        if json_file:
+            if not json_file.exists():
+                print_error(f"File not found: {json_file}")
+                raise typer.Exit(1)
+            with open(json_file) as f:
+                comment_data = json.load(f)
+        elif text:
+            comment_data = {"value": text}
+        else:
+            # Try reading from stdin
+            if not sys.stdin.isatty():
+                try:
+                    stdin_data = sys.stdin.read().strip()
+                    if stdin_data:
+                        comment_data = {"value": stdin_data}
+                    else:
+                        print_error("No comment text provided. Use --text or --json-file")
+                        raise typer.Exit(1)
+                except Exception as e:
+                    print_error(f"Error reading from stdin: {e}")
+                    raise typer.Exit(1)
+            else:
+                print_error("No comment text provided. Use --text or --json-file")
+                raise typer.Exit(1)
+
+        result = client.Comment.create(
+            ref_type=ref_type,
+            ref_id=ref_id,
+            attributes=comment_data,
+            silent=silent,
+            hook=not no_hook,
+            alert_invite=alert_invite
+        )
+        formatted = format_response(result)
+        print_success(f"Comment added to {ref_type} {ref_id}")
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("list")
+def list_comments(
+    ref_type: str = typer.Argument(..., help="Object type (e.g., 'item', 'status')"),
+    ref_id: int = typer.Argument(..., help="Object ID"),
+    limit: int = typer.Option(100, "--limit", help="Maximum comments to return"),
+    offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+):
+    """
+    Get all comments on a Podio object.
+
+    Examples:
+        podio comment list item 12345
+        podio comment list item 12345 --limit 50
+        podio comment list item 12345 --offset 10
+    """
+    try:
+        client = get_client()
+        result = client.Comment.get_for_object(
+            ref_type=ref_type,
+            ref_id=ref_id,
+            limit=limit,
+            offset=offset
+        )
+        formatted = format_response(result)
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("get")
+def get_comment(
+    comment_id: int = typer.Argument(..., help="Comment ID to retrieve"),
+):
+    """
+    Get a specific comment by ID.
+
+    Examples:
+        podio comment get 98765
+    """
+    try:
+        client = get_client()
+        result = client.Comment.get(comment_id)
+        formatted = format_response(result)
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("update")
+def update_comment(
+    comment_id: int = typer.Argument(..., help="Comment ID to update"),
+    text: Optional[str] = typer.Option(None, "--text", help="Updated comment text"),
+    json_file: Optional[Path] = typer.Option(
+        None,
+        "--json-file",
+        help="Path to JSON file with updated comment data",
+    ),
+):
+    """
+    Update an existing comment.
+
+    This should only be used to correct spelling and grammatical mistakes.
+
+    Update data format:
+        {
+            "value": "Updated comment text",
+            "external_id": "Optional external ID",
+            "file_ids": [123, 456],
+            "embed_id": 789,
+            "embed_url": "https://example.com"
+        }
+
+    Examples:
+        podio comment update 98765 --text "Corrected comment text"
+        podio comment update 98765 --json-file updated-comment.json
+    """
+    try:
+        client = get_client()
+
+        # Build update data
+        if json_file:
+            if not json_file.exists():
+                print_error(f"File not found: {json_file}")
+                raise typer.Exit(1)
+            with open(json_file) as f:
+                update_data = json.load(f)
+        elif text:
+            update_data = {"value": text}
+        else:
+            print_error("No update data provided. Use --text or --json-file")
+            raise typer.Exit(1)
+
+        result = client.Comment.update(
+            comment_id=comment_id,
+            attributes=update_data
+        )
+        formatted = format_response(result)
+        print_success(f"Comment {comment_id} updated successfully")
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("delete")
+def delete_comment(
+    comment_id: int = typer.Argument(..., help="Comment ID to delete"),
+    no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
+):
+    """
+    Delete a comment.
+
+    Examples:
+        podio comment delete 98765
+        podio comment delete 98765 --no-hook
+    """
+    try:
+        client = get_client()
+        client.Comment.delete(comment_id=comment_id, hook=not no_hook)
+        print_success(f"Comment {comment_id} deleted successfully")
+        print_json({"comment_id": comment_id, "deleted": True})
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)

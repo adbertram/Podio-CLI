@@ -663,3 +663,78 @@ class Batch(Area):
         """
         return self.transport.GET(url='/batch/%d' % batch_id)
 
+
+class Comment(Area):
+    """Podio Comment API operations"""
+
+    def create(self, ref_type, ref_id, attributes, silent=False, hook=True, alert_invite=False):
+        """
+        Add a comment to an object (item, status, etc.)
+
+        :param ref_type: The type of object (e.g., 'item', 'status')
+        :param ref_id: The ID of the object
+        :param attributes: Comment data (value, external_id, file_ids, embed_id, embed_url)
+        :param silent: If true, notifications will be suppressed
+        :param hook: If false, hooks will not be executed
+        :param alert_invite: True to automatically invite mentioned users
+        :return: Comment object
+        """
+        params = []
+        if silent:
+            params.append('silent=1')
+        if not hook:
+            params.append('hook=false')
+        if alert_invite:
+            params.append('alert_invite=true')
+
+        query_string = '?' + '&'.join(params) if params else ''
+        url = '/comment/{}/{}{}'.format(ref_type, ref_id, query_string)
+
+        attribute_data = json.dumps(attributes)
+        return self.transport.POST(url=url, body=attribute_data, type='application/json')
+
+    def get_for_object(self, ref_type, ref_id, limit=100, offset=0):
+        """
+        Get all comments on an object
+
+        :param ref_type: The type of object (e.g., 'item', 'status')
+        :param ref_id: The ID of the object
+        :param limit: Maximum number of comments to return
+        :param offset: Offset for pagination
+        :return: List of comments
+        """
+        url = '/comment/{}/{}?limit={}&offset={}'.format(ref_type, ref_id, limit, offset)
+        return self.transport.GET(url=url)
+
+    def get(self, comment_id):
+        """
+        Get a specific comment by ID
+
+        :param comment_id: The comment ID
+        :return: Comment object
+        """
+        return self.transport.GET(url='/comment/{}'.format(comment_id))
+
+    def update(self, comment_id, attributes):
+        """
+        Update an existing comment
+
+        :param comment_id: The comment ID
+        :param attributes: Updated comment data
+        :return: Updated comment object
+        """
+        attribute_data = json.dumps(attributes)
+        return self.transport.PUT(url='/comment/{}'.format(comment_id),
+                                  body=attribute_data, type='application/json')
+
+    def delete(self, comment_id, hook=True):
+        """
+        Delete a comment
+
+        :param comment_id: The comment ID
+        :param hook: If false, hooks will not be executed
+        :return: None
+        """
+        query_string = '?hook=false' if not hook else ''
+        return self.transport.DELETE(url='/comment/{}{}'.format(comment_id, query_string))
+
