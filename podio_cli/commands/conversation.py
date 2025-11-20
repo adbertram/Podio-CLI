@@ -28,7 +28,7 @@ def list_conversations(
     """
     try:
         client = get_client()
-        result = client.Conversation.get_all(limit=limit, offset=offset)
+        result = client.Conversation.find_all(limit=limit, offset=offset)
         formatted = format_response(result)
         print_json(formatted)
     except Exception as e:
@@ -50,7 +50,7 @@ def get_conversation(
     """
     try:
         client = get_client()
-        result = client.Conversation.get(conversation_id)
+        result = client.Conversation.find(conversation_id)
         formatted = format_response(result)
         print_json(formatted)
     except Exception as e:

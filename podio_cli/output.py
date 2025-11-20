@@ -66,7 +66,7 @@ def handle_api_error(error: Exception) -> int:
 
     # Check for permission errors
     if "403" in error_str or "forbidden" in error_str.lower():
-        print_error("Permission denied. You don't have access to this resource.")
+        print_error("Permission denied or invalid resource ID. Check that the ID is correct and you have access to this resource.")
         return 1
 
     # Check for rate limiting

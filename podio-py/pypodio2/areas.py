@@ -515,8 +515,14 @@ class Notification(Area):
 
 
 class Conversation(Area):
-    def find_all(self):
-        return self.transport.GET(url='/conversation/')
+    def find_all(self, limit=None, offset=None):
+        params = {}
+        if limit is not None:
+            params['limit'] = limit
+        if offset is not None:
+            params['offset'] = offset
+        query = '?' + urlencode(params) if params else ''
+        return self.transport.GET(url='/conversation/' + query)
 
     def find(self, conversation_id):
         return self.transport.GET(url='/conversation/%s' % conversation_id)
@@ -524,6 +530,45 @@ class Conversation(Area):
     def create(self, attributes):
         attributes = json.dumps(attributes)
         return self.transport.POST(url='/conversation/', body=attributes, type='application/json')
+
+    def reply(self, conversation_id, attributes):
+        attributes = json.dumps(attributes)
+        return self.transport.POST(url='/conversation/%s/reply' % conversation_id, body=attributes, type='application/json')
+
+    def add_participants(self, conversation_id, participant_ids):
+        attributes = json.dumps({'participants': participant_ids})
+        return self.transport.POST(url='/conversation/%s/participant/' % conversation_id, body=attributes, type='application/json')
+
+    def mark_as_read(self, conversation_id):
+        return self.transport.POST(url='/conversation/%s/read' % conversation_id)
+
+    def mark_as_unread(self, conversation_id):
+        return self.transport.DELETE(url='/conversation/%s/read' % conversation_id)
+
+    def search(self, query, limit=None, offset=None):
+        params = {'text': query}
+        if limit is not None:
+            params['limit'] = limit
+        if offset is not None:
+            params['offset'] = offset
+        query_string = '?' + urlencode(params)
+        return self.transport.GET(url='/conversation/search/' + query_string)
+
+    def get_events(self, conversation_id, limit=None, offset=None):
+        params = {}
+        if limit is not None:
+            params['limit'] = limit
+        if offset is not None:
+            params['offset'] = offset
+        query = '?' + urlencode(params) if params else ''
+        return self.transport.GET(url='/conversation/%s/event/' % conversation_id + query)
+
+    def get_on_object(self, ref_type, ref_id):
+        return self.transport.GET(url='/conversation/%s/%s/' % (ref_type, ref_id))
+
+    def create_on_object(self, ref_type, ref_id, attributes):
+        attributes = json.dumps(attributes)
+        return self.transport.POST(url='/conversation/%s/%s/' % (ref_type, ref_id), body=attributes, type='application/json')
 
     def star(self, conversation_id):
         return self.transport.POST(url='/conversation/%s/star' % conversation_id)
