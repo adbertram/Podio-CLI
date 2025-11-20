@@ -4,10 +4,10 @@ A command-line interface for the Podio API built with Python and Typer. Automate
 
 ## Features
 
-- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces)
+- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces, comments)
 - **JSON output** - Perfect for scripting and automation
 - **Environment-based authentication** - Secure credential management via .env
-- **Comprehensive coverage** - Support for items, apps, tasks, and spaces
+- **Comprehensive coverage** - Support for items, apps, tasks, spaces, and comments
 - **Stdin/stdout support** - Easy integration with bash pipelines
 
 ## Installation
@@ -298,6 +298,60 @@ For create/update operations, use this JSON structure:
       "values": [{"value": "active"}]
     }
   ]
+}
+```
+
+### Comment Commands
+
+Manage comments on Podio objects (items, statuses, etc.).
+
+```bash
+# Add a comment to an item
+podio comment create item <item_id> --text "Your comment text"
+
+# List all comments on an object
+podio comment list item <item_id> [--limit 100] [--offset 0]
+
+# Get a specific comment
+podio comment get <comment_id>
+
+# Update a comment
+podio comment update <comment_id> --text "Updated comment text"
+
+# Delete a comment
+podio comment delete <comment_id> [--no-hook]
+```
+
+**Examples:**
+```bash
+# Add a simple comment
+podio comment create item 12345 --text "Great work!"
+
+# Add a comment silently (no notifications)
+podio comment create item 12345 --text "Internal note" --silent
+
+# Add a comment from JSON file (for complex comments with attachments)
+podio comment create item 12345 --json-file comment.json
+
+# List recent comments
+podio comment list item 12345 --limit 10
+
+# Update a comment (for typo corrections)
+podio comment update 98765 --text "Corrected spelling"
+
+# Delete a comment without triggering webhooks
+podio comment delete 98765 --no-hook
+```
+
+**Comment Data Format (for JSON files):**
+
+```json
+{
+  "value": "Comment text",
+  "external_id": "Optional external ID",
+  "file_ids": [123, 456],
+  "embed_id": 789,
+  "embed_url": "https://example.com"
 }
 ```
 
