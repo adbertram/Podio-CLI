@@ -245,12 +245,64 @@ def get_item_values(
     """
     Get field values for a specific item.
 
+    Returns all field values in a clean format using the v2 API endpoint.
+
     Examples:
         podio item values 12345
     """
     try:
         client = get_client()
-        result = client.Item.values(item_id=item_id)
+        result = client.Item.values_v2(item_id=item_id)
+        formatted = format_response(result)
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("field-value")
+def get_field_value(
+    item_id: int = typer.Argument(..., help="Item ID to get field value from"),
+    field: str = typer.Argument(..., help="Field ID or external_id to retrieve"),
+):
+    """
+    Get a specific field's values for an item (v2 endpoint).
+
+    The field can be specified either as:
+    - field_id (e.g., 274720804)
+    - external_id (e.g., "potential-writer")
+
+    Examples:
+        podio item field-value 12345 274720804
+        podio item field-value 12345 potential-writer
+    """
+    try:
+        client = get_client()
+        result = client.Item.field_value_v2(item_id=item_id, field_or_external_id=field)
+        formatted = format_response(result)
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("get-by-external-id")
+def get_item_by_external_id(
+    app_id: int = typer.Argument(..., help="Application ID"),
+    external_id: str = typer.Argument(..., help="External ID of the item"),
+):
+    """
+    Get a Podio item by external ID within a specific app.
+
+    If multiple items have the same external_id, returns just one.
+
+    Examples:
+        podio item get-by-external-id 30543397 my-custom-id
+        podio item get-by-external-id 12345 invoice-2024-001
+    """
+    try:
+        client = get_client()
+        result = client.Item.find_by_external_id(app_id=app_id, external_id=external_id)
         formatted = format_response(result)
         print_json(formatted)
     except Exception as e:
