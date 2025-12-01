@@ -324,7 +324,7 @@ class HttpTransport(object):
         elif 'type' in kwargs:
             if kwargs['type'] == 'multipart/form-data':
                 body, new_headers = multipart_encode(kwargs['body'])
-                body = "".join(body)
+                body = b"".join(body)
             else:
                 body = kwargs['body']
         else:

@@ -8,7 +8,7 @@ multipart/form-data is the standard way to upload files over HTTP"""
 import mimetypes
 import os
 import re
-import urllib
+import urllib.parse
 from email.header import Header
 
 __all__ = ['gen_boundary', 'encode_and_quote', 'MultipartParam',
@@ -29,33 +29,31 @@ try:
         return uuid.uuid4().hex
 except ImportError:
     import random
-    import sha
+    import hashlib
 
 
     def gen_boundary():
         """Returns a random string to use as the boundary for a message"""
         bits = random.getrandbits(160)
-        return sha.new(str(bits)).hexdigest()
+        return hashlib.sha1(str(bits).encode()).hexdigest()
 
 
 def encode_and_quote(data):
-    """If ``data`` is unicode, return urllib.quote_plus(data.encode("utf-8"))
-    otherwise return urllib.quote_plus(data)"""
+    """URL-encode the data. Returns a string."""
     if data is None:
         return None
 
-    if isinstance(data, unicode):
-        data = data.encode("utf-8")
-    return urllib.quote_plus(data)
+    if isinstance(data, bytes):
+        data = data.decode("utf-8")
+    return urllib.parse.quote_plus(str(data))
 
 
 def _strify(s):
-    """If s is a unicode string, encode it to UTF-8 and return the results,
-    otherwise return str(s), or None if s is None"""
+    """Convert to string. Returns str or None."""
     if s is None:
         return None
-    if isinstance(s, unicode):
-        return s.encode("utf-8")
+    if isinstance(s, bytes):
+        return s.decode("utf-8")
     return str(s)
 
 
@@ -99,13 +97,13 @@ class MultipartParam(object):
         if filename is None:
             self.filename = None
         else:
-            if isinstance(filename, unicode):
+            if isinstance(filename, str):
                 # Encode with XML entities
                 self.filename = filename.encode("ascii", "xmlcharrefreplace")
             else:
-                self.filename = str(filename)
-            self.filename = self.filename.encode("string_escape"). \
-                replace('"', '\\"')
+                self.filename = str(filename).encode("ascii", "xmlcharrefreplace")
+            # Escape special characters
+            self.filename = self.filename.decode("ascii").replace('"', '\\"').encode("ascii")
         self.filetype = _strify(filetype)
 
         self.filesize = filesize
@@ -127,11 +125,17 @@ class MultipartParam(object):
                 except:
                     raise ValueError("Could not determine filesize")
 
-    def __cmp__(self, other):
+    def __eq__(self, other):
         attrs = ['name', 'value', 'filename', 'filetype', 'filesize', 'fileobj']
         myattrs = [getattr(self, a) for a in attrs]
         oattrs = [getattr(other, a) for a in attrs]
-        return cmp(myattrs, oattrs)
+        return myattrs == oattrs
+
+    def __lt__(self, other):
+        attrs = ['name', 'value', 'filename', 'filetype', 'filesize', 'fileobj']
+        myattrs = [getattr(self, a) for a in attrs]
+        oattrs = [getattr(other, a) for a in attrs]
+        return myattrs < oattrs
 
     def reset(self):
         if self.fileobj is not None:
@@ -231,35 +235,41 @@ class MultipartParam(object):
         return "%s%s\r\n" % (self.encode_hdr(boundary), value)
 
     def iter_encode(self, boundary, blocksize=4096):
-        """Yields the encoding of this parameter
+        """Yields the encoding of this parameter as bytes.
         If self.fileobj is set, then blocks of ``blocksize`` bytes are read and
         yielded."""
         total = self.get_size(boundary)
         current = 0
         if self.value is not None:
             block = self.encode(boundary)
+            if isinstance(block, str):
+                block = block.encode('utf-8')
             current += len(block)
             yield block
             if self.cb:
                 self.cb(self, current, total)
         else:
             block = self.encode_hdr(boundary)
+            if isinstance(block, str):
+                block = block.encode('utf-8')
             current += len(block)
             yield block
             if self.cb:
                 self.cb(self, current, total)
-            last_block = ""
+            last_block = b""
             encoded_boundary = "--%s" % encode_and_quote(boundary)
-            boundary_exp = re.compile("^%s$" % re.escape(encoded_boundary),
-                                      re.M)
+            boundary_exp = re.compile(encoded_boundary.encode('utf-8'))
             while True:
                 block = self.fileobj.read(blocksize)
                 if not block:
                     current += 2
-                    yield "\r\n"
+                    yield b"\r\n"
                     if self.cb:
                         self.cb(self, current, total)
                     break
+                # Ensure block is bytes
+                if isinstance(block, str):
+                    block = block.encode('utf-8')
                 last_block += block
                 if boundary_exp.search(last_block):
                     raise ValueError("boundary found in file data")
@@ -323,7 +333,7 @@ def get_headers(params, boundary):
     """Returns a dictionary with Content-Type and Content-Length headers
     for the multipart/form-data encoding of ``params``."""
     headers = {}
-    boundary = urllib.quote_plus(boundary)
+    boundary = urllib.parse.quote_plus(boundary)
     headers['Content-Type'] = "multipart/form-data; boundary=%s" % boundary
     headers['Content-Length'] = str(get_body_size(params, boundary))
     return headers
@@ -344,12 +354,12 @@ class MultipartYielder:
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         """generator function to yield multipart/form-data representation
         of parameters"""
         if self.param_iter is not None:
             try:
-                block = self.param_iter.next()
+                block = next(self.param_iter)
                 self.current += len(block)
                 if self.cb:
                     self.cb(self.p, self.current, self.total)
@@ -364,7 +374,7 @@ class MultipartYielder:
             self.param_iter = None
             self.p = None
             self.i = None
-            block = "--%s--\r\n" % self.boundary
+            block = ("--%s--\r\n" % self.boundary).encode('utf-8')
             self.current += len(block)
             if self.cb:
                 self.cb(self.p, self.current, self.total)
@@ -373,7 +383,10 @@ class MultipartYielder:
         self.p = self.params[self.i]
         self.param_iter = self.p.iter_encode(self.boundary)
         self.i += 1
-        return self.next()
+        return next(self)
+
+    # Python 2 compatibility
+    next = __next__
 
     def reset(self):
         self.i = 0
@@ -425,7 +438,7 @@ def multipart_encode(params, boundary=None, cb=None):
     if boundary is None:
         boundary = gen_boundary()
     else:
-        boundary = urllib.quote_plus(boundary)
+        boundary = urllib.parse.quote_plus(boundary)
 
     headers = get_headers(params, boundary)
     params = MultipartParam.from_params(params)

@@ -4,10 +4,11 @@ A command-line interface for the Podio API built with Python and Typer. Automate
 
 ## Features
 
-- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces, comments)
+- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces, comments, files)
 - **JSON output** - Perfect for scripting and automation
 - **Environment-based authentication** - Secure credential management via .env
-- **Comprehensive coverage** - Support for items, apps, tasks, spaces, and comments
+- **Comprehensive coverage** - Support for items, apps, tasks, spaces, comments, and files
+- **File management** - Upload, attach, download, and copy files
 - **Stdin/stdout support** - Easy integration with bash pipelines
 
 ## Installation
@@ -407,6 +408,65 @@ podio task update 99999 --text "Updated description"
 }
 ```
 
+### File Commands
+
+Upload, attach, and manage files in Podio.
+
+```bash
+# Upload a file to Podio (returns file_id)
+podio file upload <file_path> [--filename "custom_name.docx"]
+
+# Attach a file to an object (item, task, comment, status, space)
+podio file attach <file_id> <ref_type> <ref_id>
+
+# Get file metadata
+podio file get <file_id>
+
+# Download a file
+podio file download <file_id> [--output ./local-file.docx]
+
+# Copy a file (creates new file_id)
+podio file copy <file_id>
+```
+
+**Examples:**
+```bash
+# Upload a document
+podio file upload ~/Documents/report.docx
+# Returns: {"file_id": 2412642794, "name": "report.docx", ...}
+
+# Upload with custom filename
+podio file upload ~/Documents/draft.docx --filename "Final Report.docx"
+
+# Attach file to an item
+podio file attach 2412642794 item 12345
+
+# Attach file to a task
+podio file attach 2412642794 task 67890
+
+# Attach file to a comment
+podio file attach 2412642794 comment 11111
+
+# Get file metadata
+podio file get 2412642794
+
+# Download file to current directory (uses original filename)
+podio file download 2412642794
+
+# Download file to specific path
+podio file download 2412642794 --output ./downloads/my-report.docx
+
+# Copy a file (useful for attaching same file to multiple objects)
+podio file copy 2412642794
+```
+
+**Valid Reference Types for Attach:**
+- `item` - Attach to a Podio item
+- `task` - Attach to a task
+- `comment` - Attach to a comment
+- `status` - Attach to a status update
+- `space` - Attach to a workspace
+
 ### Space Commands
 
 Manage Podio spaces (workspaces).
@@ -600,7 +660,9 @@ pypodio-cli/
 │       ├── app.py           # Application commands
 │       ├── item.py          # Item commands
 │       ├── task.py          # Task commands
-│       └── space.py         # Space commands
+│       ├── space.py         # Space commands
+│       ├── comment.py       # Comment commands
+│       └── file.py          # File upload/attach commands
 ├── tests/
 ├── pyproject.toml
 └── README.md

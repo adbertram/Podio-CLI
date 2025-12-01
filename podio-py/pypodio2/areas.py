@@ -328,6 +328,95 @@ class Task(Area):
                                                            self.get_options(silent=silent,
                                                                             hook=hook)))
 
+    def find(self, task_id):
+        """
+        Get a specific task by ID.
+        https://developers.podio.com/doc/tasks/get-task-22413
+
+        :param task_id: Task ID
+        :type task_id: str or int
+        :return: Task details
+        :rtype: dict
+        """
+        return self.transport.GET(url='/task/%s' % task_id)
+
+    def update(self, task_id, attributes, silent=False, hook=True):
+        """
+        Update a task.
+        https://developers.podio.com/doc/tasks/update-task-10583674
+
+        :param task_id: Task ID
+        :param attributes: Task attributes to update
+        :param silent: If true, no notifications sent
+        :param hook: If false, webhooks not called
+        :type task_id: str or int
+        :type attributes: dict
+        :return: Task details
+        :rtype: dict
+        """
+        attributes = json.dumps(attributes)
+        return self.transport.PUT(url='/task/%s%s' % (task_id, self.get_options(silent=silent, hook=hook)),
+                                 body=attributes,
+                                 type='application/json')
+
+    def get_labels(self):
+        """
+        Get all task labels for the active user.
+        https://developers.podio.com/doc/tasks/get-labels-151534
+
+        :return: List of labels
+        :rtype: list
+        """
+        return self.transport.GET(url='/task/label/')
+
+    def create_label(self, text, color=None):
+        """
+        Create a new task label.
+        https://developers.podio.com/doc/tasks/create-label-151265
+
+        :param text: Label text
+        :param color: Optional color (hex code or color name)
+        :type text: str
+        :type color: str
+        :return: Created label
+        :rtype: dict
+        """
+        attributes = {'text': text}
+        if color:
+            attributes['color'] = color
+        attributes = json.dumps(attributes)
+        return self.transport.POST(url='/task/label/',
+                                   body=attributes,
+                                   type='application/json')
+
+    def update_labels(self, task_id, labels):
+        """
+        Update labels on a task.
+        https://developers.podio.com/doc/tasks/update-task-labels-151769
+
+        :param task_id: Task ID
+        :param labels: List of label IDs or label names
+        :type task_id: str or int
+        :type labels: list
+        :return: Updated task
+        :rtype: dict
+        """
+        if isinstance(labels, list):
+            labels = json.dumps(labels)
+        return self.transport.PUT(url='/task/%s/label/' % task_id,
+                                 body=labels,
+                                 type='application/json')
+
+    def delete_label(self, label_id):
+        """
+        Delete a task label.
+        https://developers.podio.com/doc/tasks/delete-label-151302
+
+        :param label_id: Label ID
+        :type label_id: str or int
+        """
+        return self.transport.DELETE(url='/task/label/%s' % label_id)
+
 
 class User(Area):
     def current(self):
