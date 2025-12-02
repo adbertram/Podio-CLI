@@ -214,3 +214,101 @@ def update_task(
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
+
+
+@app.command("list-labels")
+def list_labels():
+    """
+    List all task labels for the authenticated user.
+
+    Examples:
+        podio task list-labels
+    """
+    try:
+        client = get_client()
+        result = client.Task.get_labels()
+        formatted = format_response(result)
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("create-label")
+def create_label(
+    text: str = typer.Argument(..., help="Label text/name"),
+    color: Optional[str] = typer.Option(None, "--color", help="Label color (hex code or color name)"),
+):
+    """
+    Create a new task label.
+
+    Examples:
+        podio task create-label "High Priority"
+        podio task create-label "Urgent" --color "red"
+        podio task create-label "Review" --color "#FF5733"
+    """
+    try:
+        client = get_client()
+        result = client.Task.create_label(text=text, color=color)
+        formatted = format_response(result)
+        print_success(f"Label '{text}' created successfully")
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("update-labels")
+def update_task_labels(
+    task_id: int = typer.Argument(..., help="Task ID"),
+    labels: str = typer.Option(..., "--labels", help="Comma-separated label IDs or names"),
+):
+    """
+    Update labels on a task. This replaces all existing labels.
+
+    Examples:
+        podio task update-labels 12345 --labels "123,456"
+        podio task update-labels 12345 --labels "High Priority,Urgent"
+    """
+    try:
+        client = get_client()
+
+        # Parse labels - could be IDs or names
+        label_list = [l.strip() for l in labels.split(",")]
+
+        # Try to convert to integers if they look like IDs
+        parsed_labels = []
+        for label in label_list:
+            try:
+                parsed_labels.append(int(label))
+            except ValueError:
+                # It's a label name, keep as string
+                parsed_labels.append(label)
+
+        result = client.Task.update_labels(task_id=task_id, labels=parsed_labels)
+        formatted = format_response(result)
+        print_success(f"Labels updated on task {task_id}")
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("delete-label")
+def delete_label(
+    label_id: int = typer.Argument(..., help="Label ID to delete"),
+):
+    """
+    Delete a task label.
+
+    Examples:
+        podio task delete-label 12345
+    """
+    try:
+        client = get_client()
+        client.Task.delete_label(label_id=label_id)
+        print_success(f"Label {label_id} deleted successfully")
+        print_json({"label_id": label_id, "deleted": True})
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
