@@ -11,6 +11,10 @@ from ..output import print_json, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio applications")
 
+# Subcommand group for field operations
+field_app = typer.Typer(help="Manage application fields")
+app.add_typer(field_app, name="field")
+
 
 @app.command("get")
 def get_app(
@@ -278,6 +282,191 @@ def export_app(
         # Timeout
         print(f"Export timed out after {max_attempts * 5} seconds", file=sys.stderr)
         raise typer.Exit(1)
+
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+# Field subcommands
+@field_app.command("add")
+def add_field(
+    app_id: int = typer.Argument(..., help="Application ID to add field to"),
+    field_type: str = typer.Option(..., "--type", "-t", help="Field type (text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel)"),
+    label: str = typer.Option(..., "--label", "-l", help="Field label"),
+    required: bool = typer.Option(False, "--required", "-r", help="Whether field is required"),
+    json_file: Optional[Path] = typer.Option(None, "--json-file", "-f", help="JSON file with full field configuration (overrides other options)"),
+    mimetypes: Optional[str] = typer.Option(None, "--mimetypes", "-m", help="Allowed mimetypes for file fields (comma-separated, e.g., 'application/*,image/*')"),
+):
+    """
+    Add a new field to an application.
+
+    Supported field types: text, number, image, date, app, money, progress,
+    location, duration, contact, calculation, embed, question, file, tel
+
+    Examples:
+        podio app field add 12345 --type text --label "Title"
+        podio app field add 12345 --type file --label "Attachments" --mimetypes "application/*,image/*"
+        podio app field add 12345 --json-file field.json
+    """
+    try:
+        import json as json_module
+
+        if json_file:
+            with open(json_file, 'r') as f:
+                field_data = json_module.load(f)
+        else:
+            field_data = {
+                'type': field_type,
+                'config': {
+                    'label': label,
+                    'required': required,
+                }
+            }
+
+            # Add type-specific settings
+            if field_type == 'file' and mimetypes:
+                field_data['config']['settings'] = {
+                    'allowed_mimetypes': [m.strip() for m in mimetypes.split(',')]
+                }
+            elif field_type == 'text':
+                field_data['config']['settings'] = {
+                    'size': 'small',
+                    'format': 'plain'
+                }
+
+        client = get_client()
+        result = client.Application.add_field(app_id=app_id, attributes=field_data)
+        formatted = format_response(result)
+
+        print(f"✓ Field '{label}' added successfully", file=sys.stderr)
+        print_json(formatted)
+
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@field_app.command("get")
+def get_field(
+    app_id: int = typer.Argument(..., help="Application ID"),
+    field_id: int = typer.Argument(..., help="Field ID to retrieve"),
+):
+    """
+    Get a field from an application.
+
+    Examples:
+        podio app field get 12345 67890
+    """
+    try:
+        client = get_client()
+        result = client.Application.get_field(app_id=app_id, field_id=field_id)
+        formatted = format_response(result)
+        print_json(formatted)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@field_app.command("update")
+def update_field(
+    app_id: int = typer.Argument(..., help="Application ID"),
+    field_id: int = typer.Argument(..., help="Field ID to update"),
+    json_file: Path = typer.Option(..., "--json-file", "-f", help="JSON file with field configuration"),
+):
+    """
+    Update a field in an application.
+
+    Examples:
+        podio app field update 12345 67890 --json-file field.json
+    """
+    try:
+        import json as json_module
+
+        with open(json_file, 'r') as f:
+            field_data = json_module.load(f)
+
+        client = get_client()
+        result = client.Application.update_field(app_id=app_id, field_id=field_id, attributes=field_data)
+        formatted = format_response(result)
+
+        print(f"✓ Field updated successfully", file=sys.stderr)
+        print_json(formatted)
+
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@field_app.command("delete")
+def delete_field(
+    app_id: int = typer.Argument(..., help="Application ID"),
+    field_id: int = typer.Argument(..., help="Field ID to delete"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+):
+    """
+    Delete a field from an application.
+
+    WARNING: This will delete all data stored in this field for all items.
+
+    Examples:
+        podio app field delete 12345 67890
+        podio app field delete 12345 67890 --force
+    """
+    try:
+        if not force:
+            confirm = typer.confirm(
+                "WARNING: Deleting a field will remove all data stored in it. Continue?"
+            )
+            if not confirm:
+                print("Aborted.", file=sys.stderr)
+                raise typer.Exit(0)
+
+        client = get_client()
+        result = client.Application.delete_field(app_id=app_id, field_id=field_id)
+        formatted = format_response(result)
+
+        print(f"✓ Field deleted successfully", file=sys.stderr)
+        print_json(formatted)
+
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@field_app.command("list")
+def list_fields(
+    app_id: int = typer.Argument(..., help="Application ID"),
+    active_only: bool = typer.Option(True, "--active-only/--all", help="Show only active fields"),
+):
+    """
+    List all fields in an application.
+
+    Examples:
+        podio app field list 12345
+        podio app field list 12345 --all
+    """
+    try:
+        client = get_client()
+        result = client.Application.find(app_id=app_id)
+
+        fields = result.get('fields', [])
+        if active_only:
+            fields = [f for f in fields if f.get('status') == 'active']
+
+        # Format output
+        output = []
+        for field in fields:
+            output.append({
+                'field_id': field.get('field_id'),
+                'label': field.get('label'),
+                'type': field.get('type'),
+                'external_id': field.get('external_id'),
+                'status': field.get('status'),
+                'required': field.get('config', {}).get('required', False),
+            })
+
+        print_json(output)
 
     except Exception as e:
         exit_code = handle_api_error(e)

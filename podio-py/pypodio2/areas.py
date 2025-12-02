@@ -219,6 +219,51 @@ class Application(Area):
         return self.transport.POST(url='/app/%s/field/' % app_id, body=attributes,
                                    type='application/json')
 
+    def get_field(self, app_id, field_id):
+        """
+        Gets a field from app with app_id
+
+        :param app_id: Application ID
+        :type app_id: str or int
+        :param field_id: Field ID
+        :type field_id: str or int
+        :return: Python dict of JSON response
+        :rtype: dict
+        """
+        return self.transport.GET(url='/app/%s/field/%s' % (app_id, field_id))
+
+    def update_field(self, app_id, field_id, attributes):
+        """
+        Updates a field in app with app_id
+
+        :param app_id: Application ID
+        :type app_id: str or int
+        :param field_id: Field ID
+        :type field_id: str or int
+        :param attributes: Field configuration
+        :type attributes: dict
+        :return: Python dict of JSON response
+        :rtype: dict
+        """
+        if not isinstance(attributes, dict):
+            raise TypeError('Must be of type dict')
+        attributes = json.dumps(attributes)
+        return self.transport.PUT(url='/app/%s/field/%s' % (app_id, field_id), body=attributes,
+                                  type='application/json')
+
+    def delete_field(self, app_id, field_id):
+        """
+        Deletes a field from app with app_id
+
+        :param app_id: Application ID
+        :type app_id: str or int
+        :param field_id: Field ID
+        :type field_id: str or int
+        :return: Python dict of JSON response
+        :rtype: dict
+        """
+        return self.transport.DELETE(url='/app/%s/field/%s' % (app_id, field_id))
+
     def deactivate(self, app_id):
         """
         Deactivates the application with app_id
