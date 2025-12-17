@@ -11,11 +11,11 @@ class Config:
 
     def __init__(self):
         """Initialize configuration by loading from .env file."""
-        # Use .env file in the Podio-CLI installation directory
+        # Use .env file in the cli-tools/podio installation directory
         # This is the directory containing podio_cli package
 
         # Get the directory where this config.py file is located
-        config_dir = Path(__file__).parent.parent  # Go up from podio_cli/ to Podio-CLI/
+        config_dir = Path(__file__).parent.parent  # Go up from podio_cli/ to cli-tools/podio/
         cli_env_path = config_dir / ".env"
 
         self.env_file_path = cli_env_path
