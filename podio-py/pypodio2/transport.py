@@ -386,11 +386,21 @@ class HttpTransport(object):
                         continue
                     # If max retries reached, let it fall through to handler
 
-                # Success or non-retryable error
+                # Handle client errors (4xx) - do not retry, fail immediately
+                if response.status >= 400 and response.status < 500:
+                    self._attribute_stack = []
+                    handler = kwargs.get('handler', _handle_response)
+                    return handler(response, data)
+
+                # Success or other non-retryable responses
                 self._attribute_stack = []
                 handler = kwargs.get('handler', _handle_response)
                 return handler(response, data)
 
+            except TransportException as e:
+                # Don't retry client errors (4xx) - they indicate bad requests
+                # that won't succeed on retry
+                raise
             except Exception as e:
                 last_exception = e
                 if attempt < self._retry_config.max_retries:
