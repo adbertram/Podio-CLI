@@ -7,7 +7,7 @@ from typing import Optional
 
 from ..client import get_client
 from ..config import get_config
-from ..output import print_json, handle_api_error, format_response
+from ..output import print_json, print_output, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio applications")
 
@@ -19,18 +19,30 @@ app.add_typer(field_app, name="field")
 @app.command("get")
 def get_app(
     app_id: int = typer.Argument(..., help="Application ID to retrieve"),
+    include_deleted: bool = typer.Option(False, "--include-deleted", help="Include deleted fields in the response"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get a Podio application by ID.
 
+    By default, deleted fields are excluded from the response.
+    Use --include-deleted to show all fields including deleted ones.
+
     Examples:
         podio app get 12345
+        podio app get 12345 --include-deleted
+        podio app get 12345 --table
     """
     try:
         client = get_client()
         result = client.Application.find(app_id=app_id)
+
+        # Filter out deleted fields by default
+        if not include_deleted and 'fields' in result:
+            result['fields'] = [f for f in result['fields'] if f.get('status') != 'deleted']
+
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -39,6 +51,7 @@ def get_app(
 @app.command("list")
 def list_apps(
     space_id: Optional[int] = typer.Option(None, "--space-id", "-s", help="Space ID to list apps from (defaults to PODIO_WORKSPACE_ID)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     List all applications in a space.
@@ -48,6 +61,7 @@ def list_apps(
     Examples:
         podio app list --space-id 87654321
         podio app list  # Uses PODIO_WORKSPACE_ID
+        podio app list --table
     """
     try:
         # Use workspace_id from config if space_id not provided
@@ -63,7 +77,7 @@ def list_apps(
         client = get_client()
         result = client.Application.list_in_space(space_id=space_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -74,6 +88,7 @@ def get_app_items(
     app_id: int = typer.Argument(..., help="Application ID to get items from"),
     limit: int = typer.Option(30, "--limit", help="Maximum number of items to return"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get all items from an application.
@@ -81,12 +96,13 @@ def get_app_items(
     Examples:
         podio app items 12345
         podio app items 12345 --limit 100
+        podio app items 12345 --table
     """
     try:
         client = get_client()
         result = client.Application.get_items(app_id=app_id, limit=limit, offset=offset)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -95,18 +111,20 @@ def get_app_items(
 @app.command("activate")
 def activate_app(
     app_id: int = typer.Argument(..., help="Application ID to activate"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Activate a Podio application.
 
     Examples:
         podio app activate 12345
+        podio app activate 12345 --table
     """
     try:
         client = get_client()
         result = client.Application.activate(app_id=app_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -115,18 +133,20 @@ def activate_app(
 @app.command("deactivate")
 def deactivate_app(
     app_id: int = typer.Argument(..., help="Application ID to deactivate"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Deactivate a Podio application.
 
     Examples:
         podio app deactivate 12345
+        podio app deactivate 12345 --table
     """
     try:
         client = get_client()
         result = client.Application.deactivate(app_id=app_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -136,6 +156,7 @@ def deactivate_app(
 def create_app(
     json_file: Optional[Path] = typer.Option(None, "--json-file", "-f", help="JSON file with app configuration"),
     space_id: Optional[int] = typer.Option(None, "--space-id", "-s", help="Space ID to create app in (defaults to PODIO_WORKSPACE_ID)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Create a new Podio application.
@@ -147,6 +168,7 @@ def create_app(
         podio app create --json-file app.json
         podio app create --space-id 10479826 --json-file app.json
         cat app.json | podio app create
+        podio app create --json-file app.json --table
     """
     try:
         import json
@@ -177,7 +199,7 @@ def create_app(
         formatted = format_response(result)
 
         print(f"✓ App created successfully", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -190,6 +212,7 @@ def export_app(
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (defaults to app_name.xlsx)"),
     format: str = typer.Option("xlsx", "--format", "-f", help="Export format (xlsx or xls)"),
     limit: Optional[int] = typer.Option(None, "--limit", help="Maximum number of items to export"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Export a Podio application to Excel.
@@ -202,6 +225,7 @@ def export_app(
         podio app export 12345
         podio app export 12345 --output my_export.xlsx
         podio app export 12345 --format xls --limit 1000
+        podio app export 12345 --table
     """
     try:
         client = get_client()
@@ -268,7 +292,7 @@ def export_app(
                     'output_file': str(output_path.absolute()),
                     'format': format
                 }
-                print_json(result)
+                print_output(result, table=table)
                 return
 
             elif status == 'failed':
@@ -292,11 +316,12 @@ def export_app(
 @field_app.command("add")
 def add_field(
     app_id: int = typer.Argument(..., help="Application ID to add field to"),
-    field_type: str = typer.Option(..., "--type", "-t", help="Field type (text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel)"),
+    field_type: str = typer.Option(..., "--type", help="Field type (text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel)"),
     label: str = typer.Option(..., "--label", "-l", help="Field label"),
     required: bool = typer.Option(False, "--required", "-r", help="Whether field is required"),
     json_file: Optional[Path] = typer.Option(None, "--json-file", "-f", help="JSON file with full field configuration (overrides other options)"),
     mimetypes: Optional[str] = typer.Option(None, "--mimetypes", "-m", help="Allowed mimetypes for file fields (comma-separated, e.g., 'application/*,image/*')"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Add a new field to an application.
@@ -308,6 +333,7 @@ def add_field(
         podio app field add 12345 --type text --label "Title"
         podio app field add 12345 --type file --label "Attachments" --mimetypes "application/*,image/*"
         podio app field add 12345 --json-file field.json
+        podio app field add 12345 --type text --label "Title" --table
     """
     try:
         import json as json_module
@@ -340,7 +366,7 @@ def add_field(
         formatted = format_response(result)
 
         print(f"✓ Field '{label}' added successfully", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -351,18 +377,20 @@ def add_field(
 def get_field(
     app_id: int = typer.Argument(..., help="Application ID"),
     field_id: int = typer.Argument(..., help="Field ID to retrieve"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get a field from an application.
 
     Examples:
         podio app field get 12345 67890
+        podio app field get 12345 67890 --table
     """
     try:
         client = get_client()
         result = client.Application.get_field(app_id=app_id, field_id=field_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -373,12 +401,14 @@ def update_field(
     app_id: int = typer.Argument(..., help="Application ID"),
     field_id: int = typer.Argument(..., help="Field ID to update"),
     json_file: Path = typer.Option(..., "--json-file", "-f", help="JSON file with field configuration"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Update a field in an application.
 
     Examples:
         podio app field update 12345 67890 --json-file field.json
+        podio app field update 12345 67890 --json-file field.json --table
     """
     try:
         import json as json_module
@@ -391,7 +421,7 @@ def update_field(
         formatted = format_response(result)
 
         print(f"✓ Field updated successfully", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -403,6 +433,7 @@ def delete_field(
     app_id: int = typer.Argument(..., help="Application ID"),
     field_id: int = typer.Argument(..., help="Field ID to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Delete a field from an application.
@@ -412,6 +443,7 @@ def delete_field(
     Examples:
         podio app field delete 12345 67890
         podio app field delete 12345 67890 --force
+        podio app field delete 12345 67890 --table
     """
     try:
         if not force:
@@ -427,7 +459,7 @@ def delete_field(
         formatted = format_response(result)
 
         print(f"✓ Field deleted successfully", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -438,6 +470,7 @@ def delete_field(
 def list_fields(
     app_id: int = typer.Argument(..., help="Application ID"),
     active_only: bool = typer.Option(True, "--active-only/--all", help="Show only active fields"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     List all fields in an application.
@@ -445,6 +478,7 @@ def list_fields(
     Examples:
         podio app field list 12345
         podio app field list 12345 --all
+        podio app field list 12345 --table
     """
     try:
         client = get_client()
@@ -466,7 +500,7 @@ def list_fields(
                 'required': field.get('config', {}).get('required', False),
             })
 
-        print_json(output)
+        print_output(output, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)

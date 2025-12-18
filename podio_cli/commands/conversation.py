@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 
 from ..client import get_client
-from ..output import print_json, print_error, print_success, handle_api_error, format_response
+from ..output import print_json, print_output, print_error, print_success, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio conversations (messages)")
 
@@ -15,6 +15,7 @@ app = typer.Typer(help="Manage Podio conversations (messages)")
 def list_conversations(
     limit: int = typer.Option(10, "--limit", help="Maximum conversations to return"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get all conversations for the authenticated user.
@@ -25,12 +26,13 @@ def list_conversations(
         podio conversation list
         podio conversation list --limit 20
         podio conversation list --offset 10 --limit 20
+        podio conversation list --table
     """
     try:
         client = get_client()
         result = client.Conversation.find_all(limit=limit, offset=offset)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -39,6 +41,7 @@ def list_conversations(
 @app.command("get")
 def get_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID to retrieve"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get a specific conversation including participants and messages.
@@ -47,12 +50,13 @@ def get_conversation(
 
     Examples:
         podio conversation get 12345
+        podio conversation get 12345 --table
     """
     try:
         client = get_client()
         result = client.Conversation.find(conversation_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -72,6 +76,7 @@ def create_conversation(
         "--json-file",
         help="Path to JSON file with conversation data",
     ),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Create a new conversation with a list of users.
@@ -91,6 +96,7 @@ def create_conversation(
     Examples:
         podio conversation create --subject "Hello" --text "Hi there" --participants "123456,789012"
         podio conversation create --json-file conversation.json
+        podio conversation create --subject "Hello" --text "Hi" --participants "123" --table
     """
     try:
         client = get_client()
@@ -123,7 +129,7 @@ def create_conversation(
         result = client.Conversation.create(attributes=conversation_data)
         formatted = format_response(result)
         print_success(f"Conversation created successfully")
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -138,6 +144,7 @@ def reply_to_conversation(
         "--json-file",
         help="Path to JSON file with reply data",
     ),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Reply to an existing conversation.
@@ -153,6 +160,7 @@ def reply_to_conversation(
     Examples:
         podio conversation reply 12345 --text "Thanks for the message"
         podio conversation reply 12345 --json-file reply.json
+        podio conversation reply 12345 --text "Thanks" --table
     """
     try:
         client = get_client()
@@ -186,7 +194,7 @@ def reply_to_conversation(
         result = client.Conversation.reply(conversation_id, attributes=reply_data)
         formatted = format_response(result)
         print_success(f"Reply sent to conversation {conversation_id}")
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -196,12 +204,14 @@ def reply_to_conversation(
 def add_participants(
     conversation_id: int = typer.Argument(..., help="Conversation ID"),
     participants: str = typer.Option(..., "--participants", help="Comma-separated list of user IDs to add"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Add participants to an existing conversation.
 
     Examples:
         podio conversation add-participants 12345 --participants "123456,789012"
+        podio conversation add-participants 12345 --participants "123456" --table
     """
     try:
         client = get_client()
@@ -216,7 +226,7 @@ def add_participants(
         result = client.Conversation.add_participants(conversation_id, participant_ids)
         formatted = format_response(result)
         print_success(f"Participants added to conversation {conversation_id}")
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -225,18 +235,20 @@ def add_participants(
 @app.command("mark-read")
 def mark_as_read(
     conversation_id: int = typer.Argument(..., help="Conversation ID to mark as read"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Mark a conversation as read.
 
     Examples:
         podio conversation mark-read 12345
+        podio conversation mark-read 12345 --table
     """
     try:
         client = get_client()
         client.Conversation.mark_as_read(conversation_id)
         print_success(f"Conversation {conversation_id} marked as read")
-        print_json({"conversation_id": conversation_id, "marked_read": True})
+        print_output({"conversation_id": conversation_id, "marked_read": True}, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -245,18 +257,20 @@ def mark_as_read(
 @app.command("mark-unread")
 def mark_as_unread(
     conversation_id: int = typer.Argument(..., help="Conversation ID to mark as unread"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Mark a conversation as unread.
 
     Examples:
         podio conversation mark-unread 12345
+        podio conversation mark-unread 12345 --table
     """
     try:
         client = get_client()
         client.Conversation.mark_as_unread(conversation_id)
         print_success(f"Conversation {conversation_id} marked as unread")
-        print_json({"conversation_id": conversation_id, "marked_unread": True})
+        print_output({"conversation_id": conversation_id, "marked_unread": True}, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -265,18 +279,20 @@ def mark_as_unread(
 @app.command("star")
 def star_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID to star"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Star a conversation.
 
     Examples:
         podio conversation star 12345
+        podio conversation star 12345 --table
     """
     try:
         client = get_client()
         client.Conversation.star(conversation_id)
         print_success(f"Conversation {conversation_id} starred")
-        print_json({"conversation_id": conversation_id, "starred": True})
+        print_output({"conversation_id": conversation_id, "starred": True}, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -285,18 +301,20 @@ def star_conversation(
 @app.command("unstar")
 def unstar_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID to unstar"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Unstar a conversation.
 
     Examples:
         podio conversation unstar 12345
+        podio conversation unstar 12345 --table
     """
     try:
         client = get_client()
         client.Conversation.unstar(conversation_id)
         print_success(f"Conversation {conversation_id} unstarred")
-        print_json({"conversation_id": conversation_id, "starred": False})
+        print_output({"conversation_id": conversation_id, "starred": False}, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -305,18 +323,20 @@ def unstar_conversation(
 @app.command("leave")
 def leave_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID to leave"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Leave a conversation.
 
     Examples:
         podio conversation leave 12345
+        podio conversation leave 12345 --table
     """
     try:
         client = get_client()
         client.Conversation.leave(conversation_id)
         print_success(f"Left conversation {conversation_id}")
-        print_json({"conversation_id": conversation_id, "left": True})
+        print_output({"conversation_id": conversation_id, "left": True}, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -327,6 +347,7 @@ def search_conversations(
     query: str = typer.Argument(..., help="Search query"),
     limit: int = typer.Option(10, "--limit", help="Maximum results to return"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Search conversations.
@@ -334,12 +355,13 @@ def search_conversations(
     Examples:
         podio conversation search "project update"
         podio conversation search "budget" --limit 20
+        podio conversation search "project" --table
     """
     try:
         client = get_client()
         result = client.Conversation.search(query, limit=limit, offset=offset)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -350,6 +372,7 @@ def get_conversation_events(
     conversation_id: int = typer.Argument(..., help="Conversation ID"),
     limit: int = typer.Option(10, "--limit", help="Maximum events to return"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get events (messages) from a conversation.
@@ -357,12 +380,13 @@ def get_conversation_events(
     Examples:
         podio conversation events 12345
         podio conversation events 12345 --limit 50
+        podio conversation events 12345 --table
     """
     try:
         client = get_client()
         result = client.Conversation.get_events(conversation_id, limit=limit, offset=offset)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -372,6 +396,7 @@ def get_conversation_events(
 def get_conversations_on_object(
     ref_type: str = typer.Argument(..., help="Object type (e.g., 'item', 'status')"),
     ref_id: int = typer.Argument(..., help="Object ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get all conversations on a specific object.
@@ -379,12 +404,13 @@ def get_conversations_on_object(
     Examples:
         podio conversation on-object item 12345
         podio conversation on-object status 67890
+        podio conversation on-object item 12345 --table
     """
     try:
         client = get_client()
         result = client.Conversation.get_on_object(ref_type, ref_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -406,6 +432,7 @@ def create_conversation_on_object(
         "--json-file",
         help="Path to JSON file with conversation data",
     ),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Create a new conversation on a specific object.
@@ -413,6 +440,7 @@ def create_conversation_on_object(
     Examples:
         podio conversation create-on-object item 12345 --subject "Question" --text "Need help" --participants "123456"
         podio conversation create-on-object item 12345 --json-file conversation.json
+        podio conversation create-on-object item 12345 --subject "Q" --text "Help" --table
     """
     try:
         client = get_client()
@@ -446,7 +474,7 @@ def create_conversation_on_object(
         result = client.Conversation.create_on_object(ref_type, ref_id, attributes=conversation_data)
         formatted = format_response(result)
         print_success(f"Conversation created on {ref_type} {ref_id}")
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

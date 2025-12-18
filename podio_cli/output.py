@@ -1,7 +1,107 @@
 """Output formatting and error handling for Podio CLI."""
 import json
 import sys
-from typing import Any
+from typing import Any, List, Dict, Optional
+
+from rich.console import Console
+from rich.table import Table
+
+
+# Rich console for table output
+console = Console()
+
+
+def print_table(data: Any, title: Optional[str] = None):
+    """
+    Print data as a formatted table to stdout.
+
+    Handles both lists of dicts and single dicts.
+    For nested objects, values are JSON-serialized.
+
+    Args:
+        data: Data to output as table (list of dicts or single dict)
+        title: Optional table title
+    """
+    if data is None:
+        console.print("[dim]No data[/dim]")
+        return
+
+    # Convert single dict to list for consistent handling
+    if isinstance(data, dict):
+        data = [data]
+
+    if not isinstance(data, list) or len(data) == 0:
+        console.print("[dim]No data[/dim]")
+        return
+
+    # Get all unique keys from all items for columns
+    all_keys: List[str] = []
+    for item in data:
+        if isinstance(item, dict):
+            for key in item.keys():
+                if key not in all_keys:
+                    all_keys.append(key)
+
+    if not all_keys:
+        console.print("[dim]No data[/dim]")
+        return
+
+    # Create table
+    table = Table(title=title, show_header=True, header_style="bold cyan")
+
+    # Add columns
+    for key in all_keys:
+        table.add_column(key)
+
+    # Add rows
+    for item in data:
+        if isinstance(item, dict):
+            row_values = []
+            for key in all_keys:
+                value = item.get(key, "")
+                # Format the value
+                row_values.append(_format_cell_value(value))
+            table.add_row(*row_values)
+
+    console.print(table)
+
+
+def _format_cell_value(value: Any) -> str:
+    """
+    Format a cell value for table display.
+
+    Args:
+        value: The value to format
+
+    Returns:
+        String representation suitable for table display
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "✓" if value else "✗"
+    if isinstance(value, (dict, list)):
+        # For complex types, truncate if too long
+        json_str = json.dumps(value, ensure_ascii=False)
+        if len(json_str) > 50:
+            return json_str[:47] + "..."
+        return json_str
+    return str(value)
+
+
+def print_output(data: Any, table: bool = False, indent: int = 2):
+    """
+    Print data in the specified format (JSON or table).
+
+    Args:
+        data: Data to output
+        table: If True, output as table; otherwise as JSON
+        indent: JSON indentation level (only used for JSON output)
+    """
+    if table:
+        print_table(data)
+    else:
+        print_json(data, indent)
 
 
 def print_json(data: Any, indent: int = 2):

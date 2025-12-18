@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 
 from ..client import get_client
-from ..output import print_json, print_error, print_success, handle_api_error, format_response
+from ..output import print_json, print_output, print_error, print_success, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio items")
 
@@ -15,6 +15,7 @@ app = typer.Typer(help="Manage Podio items")
 def get_item(
     item_id: int = typer.Argument(..., help="Item ID to retrieve"),
     basic: bool = typer.Option(False, "--basic", help="Get basic item info only"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get a Podio item by ID.
@@ -22,12 +23,13 @@ def get_item(
     Examples:
         podio item get 12345
         podio item get 12345 --basic
+        podio item get 12345 --table
     """
     try:
         client = get_client()
         result = client.Item.find(item_id=item_id, basic=basic)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -49,6 +51,7 @@ def filter_items(
         help="Field to sort by",
     ),
     sort_desc: bool = typer.Option(False, "--desc", help="Sort in descending order"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Filter items in a Podio application.
@@ -58,6 +61,7 @@ def filter_items(
         podio item filter 12345 --filters '{"status": "active"}'
         podio item filter 12345 --limit 100 --offset 0
         podio item filter 12345 --sort-by "created_on" --desc
+        podio item filter 12345 --table
     """
     try:
         client = get_client()
@@ -84,7 +88,7 @@ def filter_items(
 
         result = client.Item.filter(app_id=app_id, attributes=attributes)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -100,6 +104,7 @@ def create_item(
     ),
     silent: bool = typer.Option(False, "--silent", help="Suppress Podio notifications"),
     no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Create a new item in a Podio application.
@@ -118,6 +123,7 @@ def create_item(
         podio item create 12345 --json-file item.json
         cat item.json | podio item create 12345
         podio item create 12345 --json-file item.json --silent
+        podio item create 12345 --json-file item.json --table
     """
     try:
         client = get_client()
@@ -150,7 +156,7 @@ def create_item(
         )
         formatted = format_response(result)
         print_success("Item created successfully")
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -166,6 +172,7 @@ def update_item(
     ),
     silent: bool = typer.Option(False, "--silent", help="Suppress Podio notifications"),
     no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Update an existing Podio item.
@@ -182,6 +189,7 @@ def update_item(
     Examples:
         podio item update 12345 --json-file update.json
         cat update.json | podio item update 12345
+        podio item update 12345 --json-file update.json --table
     """
     try:
         client = get_client()
@@ -209,7 +217,7 @@ def update_item(
         )
         formatted = format_response(result)
         print_success(f"Item {item_id} updated successfully")
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -220,6 +228,7 @@ def delete_item(
     item_id: int = typer.Argument(..., help="Item ID to delete"),
     silent: bool = typer.Option(False, "--silent", help="Suppress Podio notifications"),
     no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Delete a Podio item.
@@ -227,12 +236,13 @@ def delete_item(
     Examples:
         podio item delete 12345
         podio item delete 12345 --silent
+        podio item delete 12345 --table
     """
     try:
         client = get_client()
         client.Item.delete(item_id=item_id, silent=silent, hook=not no_hook)
         print_success(f"Item {item_id} deleted successfully")
-        print_json({"item_id": item_id, "deleted": True})
+        print_output({"item_id": item_id, "deleted": True}, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -241,6 +251,7 @@ def delete_item(
 @app.command("values")
 def get_item_values(
     item_id: int = typer.Argument(..., help="Item ID to get values from"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get field values for a specific item.
@@ -249,12 +260,13 @@ def get_item_values(
 
     Examples:
         podio item values 12345
+        podio item values 12345 --table
     """
     try:
         client = get_client()
         result = client.Item.values_v2(item_id=item_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -264,6 +276,7 @@ def get_item_values(
 def get_field_value(
     item_id: int = typer.Argument(..., help="Item ID to get field value from"),
     field: str = typer.Argument(..., help="Field ID or external_id to retrieve"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get a specific field's values for an item (v2 endpoint).
@@ -275,12 +288,13 @@ def get_field_value(
     Examples:
         podio item field-value 12345 274720804
         podio item field-value 12345 potential-writer
+        podio item field-value 12345 potential-writer --table
     """
     try:
         client = get_client()
         result = client.Item.field_value_v2(item_id=item_id, field_or_external_id=field)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -290,6 +304,7 @@ def get_field_value(
 def get_item_by_external_id(
     app_id: int = typer.Argument(..., help="Application ID"),
     external_id: str = typer.Argument(..., help="External ID of the item"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get a Podio item by external ID within a specific app.
@@ -299,12 +314,13 @@ def get_item_by_external_id(
     Examples:
         podio item get-by-external-id 30543397 my-custom-id
         podio item get-by-external-id 12345 invoice-2024-001
+        podio item get-by-external-id 12345 invoice-2024-001 --table
     """
     try:
         client = get_client()
         result = client.Item.find_by_external_id(app_id=app_id, external_id=external_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..client import get_client
-from ..output import print_json, handle_api_error, format_response
+from ..output import print_json, print_output, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio webhooks")
 
@@ -15,7 +15,8 @@ def create_webhook(
     hookable_type: str = typer.Argument(..., help="Type of object to hook (e.g., 'app', 'space')"),
     hookable_id: int = typer.Argument(..., help="ID of the object to hook"),
     url: str = typer.Option(..., "--url", "-u", help="Webhook URL to receive POST requests"),
-    type: str = typer.Option("item.update", "--type", "-t", help="Event type to trigger on (e.g., 'item.create', 'item.update', 'item.delete')"),
+    type: str = typer.Option("item.update", "--type", help="Event type to trigger on (e.g., 'item.create', 'item.update', 'item.delete')"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Create a new webhook for a Podio object.
@@ -33,7 +34,8 @@ def create_webhook(
 
     Examples:
         podio webhook create app 12345 --url https://example.com/webhook --type item.update
-        podio webhook create app 12345 -u https://webhook.site/abc123 -t item.create
+        podio webhook create app 12345 -u https://webhook.site/abc123 --type item.create
+        podio webhook create app 12345 -u https://example.com/hook --table
     """
     try:
         client = get_client()
@@ -52,7 +54,7 @@ def create_webhook(
         formatted = format_response(result)
         print(f"✓ Webhook created successfully (ID: {result.get('hook_id')})", file=sys.stderr)
         print(f"Note: You may need to verify the webhook. Use 'podio webhook verify {result.get('hook_id')}' to request verification.", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -63,7 +65,8 @@ def create_webhook(
 def create_field_webhook(
     field_id: int = typer.Argument(..., help="Field ID to create webhook for"),
     url: str = typer.Option(..., "--url", "-u", help="Webhook URL to receive POST requests"),
-    type: str = typer.Option("item.update", "--type", "-t", help="Event type to trigger on (e.g., 'item.create', 'item.update', 'item.delete')"),
+    type: str = typer.Option("item.update", "--type", help="Event type to trigger on (e.g., 'item.create', 'item.update', 'item.delete')"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Create a field-level webhook that only fires when a specific field is updated.
@@ -83,7 +86,8 @@ def create_field_webhook(
 
     Examples:
         podio webhook create-field 123456 --url https://example.com/webhook --type item.update
-        podio webhook create-field 123456 -u https://webhook.site/abc123 -t item.update
+        podio webhook create-field 123456 -u https://webhook.site/abc123 --type item.update
+        podio webhook create-field 123456 -u https://example.com/hook --table
     """
     try:
         client = get_client()
@@ -103,7 +107,7 @@ def create_field_webhook(
         formatted = format_response(result)
         print(f"✓ Field-level webhook created successfully (ID: {result.get('hook_id')})", file=sys.stderr)
         print(f"Note: You may need to verify the webhook. Use 'podio webhook verify {result.get('hook_id')}' to request verification.", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -114,6 +118,7 @@ def create_field_webhook(
 def list_webhooks(
     hookable_type: str = typer.Argument(..., help="Type of object (e.g., 'app', 'space')"),
     hookable_id: int = typer.Argument(..., help="ID of the object"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     List all webhooks for a Podio object.
@@ -124,6 +129,7 @@ def list_webhooks(
     Examples:
         podio webhook list app 12345
         podio webhook list space 67890
+        podio webhook list app 12345 --table
     """
     try:
         client = get_client()
@@ -162,7 +168,7 @@ def list_webhooks(
             result = result + field_webhooks
 
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -172,6 +178,7 @@ def list_webhooks(
 @app.command("list-field")
 def list_field_webhooks(
     field_id: int = typer.Argument(..., help="Field ID to list webhooks for"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     List all webhooks for a specific field.
@@ -180,6 +187,7 @@ def list_field_webhooks(
 
     Examples:
         podio webhook list-field 123456
+        podio webhook list-field 123456 --table
     """
     try:
         client = get_client()
@@ -189,7 +197,7 @@ def list_field_webhooks(
         )
 
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -199,6 +207,7 @@ def list_field_webhooks(
 @app.command("verify")
 def verify_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to verify"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Request verification for a webhook.
@@ -221,6 +230,7 @@ def verify_webhook(
 
     Examples:
         podio webhook verify 123456
+        podio webhook verify 123456 --table
     """
     try:
         client = get_client()
@@ -230,7 +240,7 @@ def verify_webhook(
         print(f"✓ Verification request sent", file=sys.stderr)
         print(f"Check your webhook endpoint for the verification code, then run:", file=sys.stderr)
         print(f"podio webhook validate {hook_id} <code>", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -241,6 +251,7 @@ def verify_webhook(
 def validate_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to validate"),
     code: str = typer.Argument(..., help="Verification code from webhook endpoint"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Validate a webhook with the verification code.
@@ -270,6 +281,7 @@ def validate_webhook(
 
     Examples:
         podio webhook validate 123456 abc123def456
+        podio webhook validate 123456 abc123 --table
     """
     try:
         client = get_client()
@@ -277,7 +289,7 @@ def validate_webhook(
 
         formatted = format_response(result)
         print(f"✓ Webhook validated successfully", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -288,6 +300,7 @@ def validate_webhook(
 def update_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to update"),
     url: str = typer.Option(..., "--url", "-u", help="New webhook URL"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Update a webhook URL.
@@ -299,6 +312,7 @@ def update_webhook(
     Examples:
         podio webhook update 123456 --url https://new-endpoint.com/webhook
         podio webhook update 123456 -u https://example.com/hook
+        podio webhook update 123456 -u https://example.com/hook --table
     """
     try:
         client = get_client()
@@ -333,6 +347,7 @@ def update_field_webhook(
     hook_id: int = typer.Argument(..., help="Field webhook ID to update"),
     field_id: int = typer.Argument(..., help="Field ID the webhook is attached to"),
     url: str = typer.Option(..., "--url", "-u", help="New webhook URL"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Update a field-level webhook URL.
@@ -344,6 +359,7 @@ def update_field_webhook(
     Examples:
         podio webhook update-field 123456 274718394 --url https://new-endpoint.com/webhook
         podio webhook update-field 123456 274718394 -u https://example.com/hook
+        podio webhook update-field 123456 274718394 -u https://example.com/hook --table
     """
     try:
         client = get_client()
@@ -400,7 +416,7 @@ def update_field_webhook(
         print(f"Old hook_id: {hook_id}", file=sys.stderr)
         print(f"New hook_id: {new_hook_id}", file=sys.stderr)
         print(f"Note: You may need to verify the webhook. Use 'podio webhook verify {new_hook_id}' to request verification.", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -410,12 +426,14 @@ def update_field_webhook(
 @app.command("delete")
 def delete_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to delete"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Delete a webhook.
 
     Examples:
         podio webhook delete 123456
+        podio webhook delete 123456 --table
     """
     try:
         client = get_client()
@@ -423,7 +441,7 @@ def delete_webhook(
 
         formatted = format_response(result)
         print(f"✓ Webhook deleted successfully", file=sys.stderr)
-        print_json(formatted)
+        print_output(formatted, table=table)
 
     except Exception as e:
         exit_code = handle_api_error(e)

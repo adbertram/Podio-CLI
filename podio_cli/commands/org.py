@@ -2,13 +2,15 @@
 import typer
 
 from ..client import get_client
-from ..output import print_json, handle_api_error, format_response
+from ..output import print_json, print_output, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio organizations")
 
 
 @app.command("list")
-def list_orgs():
+def list_orgs(
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
     """
     List all organizations the user is a member of.
 
@@ -16,12 +18,13 @@ def list_orgs():
 
     Examples:
         podio org list
+        podio org list --table
     """
     try:
         client = get_client()
         result = client.Org.get_all()
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

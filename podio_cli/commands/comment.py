@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 
 from ..client import get_client
-from ..output import print_json, print_error, print_success, handle_api_error, format_response
+from ..output import print_json, print_output, print_error, print_success, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio comments")
 
@@ -24,6 +24,7 @@ def create_comment(
     silent: bool = typer.Option(False, "--silent", help="Suppress notifications"),
     no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
     alert_invite: bool = typer.Option(False, "--alert-invite", help="Auto-invite mentioned users"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Add a comment to a Podio object (item, status, etc.).
@@ -44,6 +45,7 @@ def create_comment(
         podio comment create item 12345 --text "This is a comment"
         podio comment create item 12345 --json-file comment.json
         podio comment create item 12345 --text "Great work!" --silent
+        podio comment create item 12345 --text "Comment" --table
     """
     try:
         client = get_client()
@@ -84,7 +86,7 @@ def create_comment(
         )
         formatted = format_response(result)
         print_success(f"Comment added to {ref_type} {ref_id}")
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -96,6 +98,7 @@ def list_comments(
     ref_id: int = typer.Argument(..., help="Object ID"),
     limit: int = typer.Option(100, "--limit", help="Maximum comments to return"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get all comments on a Podio object.
@@ -104,6 +107,7 @@ def list_comments(
         podio comment list item 12345
         podio comment list item 12345 --limit 50
         podio comment list item 12345 --offset 10
+        podio comment list item 12345 --table
     """
     try:
         client = get_client()
@@ -114,7 +118,7 @@ def list_comments(
             offset=offset
         )
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -123,18 +127,20 @@ def list_comments(
 @app.command("get")
 def get_comment(
     comment_id: int = typer.Argument(..., help="Comment ID to retrieve"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Get a specific comment by ID.
 
     Examples:
         podio comment get 98765
+        podio comment get 98765 --table
     """
     try:
         client = get_client()
         result = client.Comment.get(comment_id)
         formatted = format_response(result)
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -149,6 +155,7 @@ def update_comment(
         "--json-file",
         help="Path to JSON file with updated comment data",
     ),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Update an existing comment.
@@ -167,6 +174,7 @@ def update_comment(
     Examples:
         podio comment update 98765 --text "Corrected comment text"
         podio comment update 98765 --json-file updated-comment.json
+        podio comment update 98765 --text "Corrected" --table
     """
     try:
         client = get_client()
@@ -190,7 +198,7 @@ def update_comment(
         )
         formatted = format_response(result)
         print_success(f"Comment {comment_id} updated successfully")
-        print_json(formatted)
+        print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -200,6 +208,7 @@ def update_comment(
 def delete_comment(
     comment_id: int = typer.Argument(..., help="Comment ID to delete"),
     no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     Delete a comment.
@@ -207,12 +216,13 @@ def delete_comment(
     Examples:
         podio comment delete 98765
         podio comment delete 98765 --no-hook
+        podio comment delete 98765 --table
     """
     try:
         client = get_client()
         client.Comment.delete(comment_id=comment_id, hook=not no_hook)
         print_success(f"Comment {comment_id} deleted successfully")
-        print_json({"comment_id": comment_id, "deleted": True})
+        print_output({"comment_id": comment_id, "deleted": True}, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
