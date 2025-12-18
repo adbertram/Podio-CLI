@@ -7,8 +7,49 @@ from rich.console import Console
 from rich.table import Table
 
 
-# Rich console for table output
-console = Console()
+# Rich console for table output - use wide width to prevent truncation
+console = Console(width=200)
+
+
+def _flatten_item(item: Dict) -> Dict:
+    """
+    Flatten a data item by extracting useful nested values.
+
+    Specifically handles Podio API patterns like config.name.
+
+    Args:
+        item: Dictionary to flatten
+
+    Returns:
+        Flattened dictionary with nested values promoted
+    """
+    flat = dict(item)
+
+    # Extract common nested config values
+    if 'config' in flat and isinstance(flat['config'], dict):
+        config = flat['config']
+        # Promote name to top level if not already present
+        if 'name' not in flat and 'name' in config:
+            flat['name'] = config['name']
+        if 'item_name' not in flat and 'item_name' in config:
+            flat['item_name'] = config['item_name']
+        if 'description' not in flat and 'description' in config:
+            flat['description'] = config['description']
+        if 'type' not in flat and 'type' in config:
+            flat['type'] = config['type']
+        # Remove config from output since we extracted what we need
+        del flat['config']
+
+    # Extract space_id from push channel (for space objects)
+    if 'space_id' not in flat and 'push' in flat and isinstance(flat['push'], dict):
+        channel = flat['push'].get('channel', '')
+        if channel.startswith('/space/'):
+            try:
+                flat['space_id'] = int(channel.split('/')[2])
+            except (IndexError, ValueError):
+                pass
+
+    return flat
 
 
 def print_table(data: Any, title: Optional[str] = None):
@@ -26,6 +67,10 @@ def print_table(data: Any, title: Optional[str] = None):
         console.print("[dim]No data[/dim]")
         return
 
+    # Handle wrapped responses (e.g., {items: [...], total: N, filtered: N})
+    if isinstance(data, dict) and 'items' in data and isinstance(data['items'], list):
+        data = data['items']
+
     # Convert single dict to list for consistent handling
     if isinstance(data, dict):
         data = [data]
@@ -33,6 +78,9 @@ def print_table(data: Any, title: Optional[str] = None):
     if not isinstance(data, list) or len(data) == 0:
         console.print("[dim]No data[/dim]")
         return
+
+    # Flatten items to extract nested values
+    data = [_flatten_item(item) if isinstance(item, dict) else item for item in data]
 
     # Get all unique keys from all items for columns
     all_keys: List[str] = []
@@ -46,18 +94,82 @@ def print_table(data: Any, title: Optional[str] = None):
         console.print("[dim]No data[/dim]")
         return
 
-    # Create table
-    table = Table(title=title, show_header=True, header_style="bold cyan")
+    # Define priority columns that should be shown first (most important)
+    priority_columns = [
+        'item_id', 'app_id', 'task_id', 'file_id', 'space_id', 'org_id',  # Primary IDs
+        'app_item_id',  # Item sequence number
+        'name', 'title', 'text',  # Names/content
+        'status',  # Status
+        'url_label',  # Short identifier
+        'type',  # Type info
+    ]
+    # Columns to hide by default (verbose data, use JSON for full output)
+    hidden_columns = [
+        'link', 'link_add', 'url', 'url_add',  # URL variations
+        'icon', 'icon_id',  # Icons
+        'sharefile_vault_url', 'item_accounting_info',  # Rarely needed
+        'original', 'default_view_id',  # Internal fields
+        'current_revision', 'revision', 'revisions',  # Version info
+        'is_default',  # Rarely useful
+        'item_name',  # Redundant with name
+        'description',  # Often null or long
+        'created_by', 'owner', 'push',  # Complex nested objects
+        'created_on', 'last_event_on',  # Timestamps
+        'post_on_new_app', 'post_on_new_member',  # Boolean flags
+        'privacy', 'premium', 'is_overdue',  # Secondary info
+        'created_via', 'last_activity',  # Item metadata
+        'app_item_id_formatted', 'comment_count',  # Redundant/secondary
+        'fields', 'rights', 'ratings', 'comments', 'tags', 'subscribed',  # Complex data
+        'pinned', 'liked', 'like_count', 'grant_count',  # Social features
+        'external_id', 'presence', 'subscribers',  # Advanced fields
+        'initial_revision', 'priority', 'file_count',  # Item internals
+        'app', 'ref', 'ref_type',  # Reference objects
+        'sharefile_vault_folder_id',  # ShareFile integration
+    ]
 
-    # Add columns
+    # Reorder columns: priority first, then others (excluding hidden)
+    ordered_keys = []
+    for key in priority_columns:
+        if key in all_keys and key not in hidden_columns:
+            ordered_keys.append(key)
     for key in all_keys:
-        table.add_column(key)
+        if key not in ordered_keys and key not in hidden_columns:
+            ordered_keys.append(key)
+
+    # Limit columns for readability - fewer is better
+    max_columns = 6
+    if len(ordered_keys) > max_columns:
+        ordered_keys = ordered_keys[:max_columns]
+
+    if not ordered_keys:
+        console.print("[dim]No data[/dim]")
+        return
+
+    # Create table with better settings for wide content
+    table = Table(
+        title=title,
+        show_header=True,
+        header_style="bold cyan",
+    )
+
+    # Add columns with appropriate settings
+    for key in ordered_keys:
+        # Set different overflow behavior based on column type
+        if key.endswith('_id') or key in ['status', 'type']:
+            # ID and status columns - compact, no wrap
+            table.add_column(key, no_wrap=True)
+        elif key in ['name', 'title', 'text', 'item_name', 'url_label', 'description']:
+            # Name/text columns - allow reasonable width
+            table.add_column(key, no_wrap=True, max_width=40)
+        else:
+            # Other columns - allow wrapping with max width
+            table.add_column(key, overflow="ellipsis", max_width=30)
 
     # Add rows
     for item in data:
         if isinstance(item, dict):
             row_values = []
-            for key in all_keys:
+            for key in ordered_keys:
                 value = item.get(key, "")
                 # Format the value
                 row_values.append(_format_cell_value(value))
