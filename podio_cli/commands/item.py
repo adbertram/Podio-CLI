@@ -102,7 +102,7 @@ def create_item(
         "--json-file",
         help="Path to JSON file with item data",
     ),
-    silent: bool = typer.Option(False, "--silent", help="Suppress Podio notifications"),
+    silent: bool = typer.Option(True, "--silent/--notify", help="Suppress Podio notifications (default: silent)"),
     no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
@@ -110,6 +110,7 @@ def create_item(
     Create a new item in a Podio application.
 
     Reads item data from a JSON file or stdin.
+    Podio notifications are suppressed by default.
 
     Item data format:
         {
@@ -122,7 +123,6 @@ def create_item(
     Examples:
         podio item create 12345 --json-file item.json
         cat item.json | podio item create 12345
-        podio item create 12345 --json-file item.json --silent
         podio item create 12345 --json-file item.json --table
     """
     try:
@@ -155,7 +155,6 @@ def create_item(
             hook=not no_hook
         )
         formatted = format_response(result)
-        print_success("Item created successfully")
         print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
