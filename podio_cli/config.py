@@ -11,32 +11,16 @@ class Config:
 
     def __init__(self):
         """Initialize configuration by loading from .env file."""
-        # Check multiple locations for .env file:
-        # 1. ~/.podio/.env (user config directory)
-        # 2. Source directory (for development)
-        # 3. Current working directory
-
+        # Always use the .env file from the CLI source directory (relative to this file)
         self._retry_config: Optional[RetryConfig] = None
-        self.env_file_path: Optional[Path] = None
-
-        # Priority order for .env file locations
-        env_paths = [
-            Path(__file__).parent.parent / ".env",  # Source/dev directory (highest priority)
-            Path.cwd() / ".env",  # Current working directory
-            Path.home() / ".podio" / ".env",  # User config directory (fallback)
-        ]
-
-        for env_path in env_paths:
-            if env_path.exists():
-                load_dotenv(env_path, override=True)
-                self.env_file_path = env_path
-                break
-
-        # If no .env found, create default in user config directory
-        if self.env_file_path is None:
-            user_config_dir = Path.home() / ".podio"
-            user_config_dir.mkdir(parents=True, exist_ok=True)
-            self.env_file_path = user_config_dir / ".env"
+        
+        # Use resolve() to get absolute path regardless of current working directory
+        self.env_file_path = Path(__file__).resolve().parent.parent / ".env"
+        
+        if self.env_file_path.exists():
+            load_dotenv(self.env_file_path, override=True)
+        else:
+            # Create the .env file if it doesn't exist
             self.env_file_path.touch()
 
     @property
