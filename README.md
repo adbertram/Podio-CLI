@@ -480,9 +480,6 @@ podio space list [--org-id <org_id>]  # Uses PODIO_ORGANIZATION_ID if not provid
 
 # Find space by URL
 podio space find-by-url <space_url>
-
-# List all apps in a space
-podio space apps <space_id>
 ```
 
 **Examples:**
@@ -503,10 +500,6 @@ podio space list
 
 # Find space by URL
 podio space find-by-url https://podio.com/ata-learning-llc/progress-content-management
-
-# List all apps in space 10479826
-podio space apps 10479826
-podio space apps 10479826 --table  # Formatted table output
 ```
 
 ## Automation Examples
