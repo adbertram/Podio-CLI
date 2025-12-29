@@ -99,3 +99,25 @@ def find_space_by_url(
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
+
+
+@app.command("apps")
+def list_space_apps(
+    space_id: int = typer.Argument(..., help="Space ID to list apps from"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    List all applications in a space.
+
+    Examples:
+        podio space apps 10479826
+        podio space apps 10479826 --table
+    """
+    try:
+        client = get_client()
+        result = client.Application.list_in_space(space_id=space_id)
+        formatted = format_response(result)
+        print_output(formatted, table=table)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
