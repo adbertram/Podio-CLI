@@ -252,6 +252,28 @@ def print_success(message: str):
     print(f"✓ {message}", file=sys.stderr)
 
 
+def print_warning(message: str):
+    """
+    Print warning message to stderr (yellow).
+
+    Args:
+        message: Warning message to print
+    """
+    yellow = "\033[93m"
+    reset = "\033[0m"
+    print(f"{yellow}Warning: {message}{reset}", file=sys.stderr)
+
+
+def print_info(message: str):
+    """
+    Print informational message to stderr.
+
+    Args:
+        message: Info message to print
+    """
+    print(message, file=sys.stderr)
+
+
 def handle_api_error(error: Exception) -> int:
     """
     Handle API errors and return appropriate exit code.
@@ -313,3 +335,7 @@ def format_response(data: Any) -> Any:
         return data[1]
 
     return data
+
+
+# Alias for cli-tools standard compliance
+handle_error = handle_api_error
