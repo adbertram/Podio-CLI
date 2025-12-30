@@ -4,12 +4,20 @@ import typer
 from typing import Optional
 
 from .client import ClientError
+from . import __version__
+
+
+def version_callback(value: bool):
+    """Print version and exit."""
+    if value:
+        typer.echo(f"podio-cli version {__version__}")
+        raise typer.Exit()
+
 
 # Create main Typer app
 app = typer.Typer(
     name="podio",
     help="CLI interface for Podio API - Manage apps, items, tasks, and more",
-    no_args_is_help=True,
     add_completion=True,
 )
 
@@ -33,7 +41,7 @@ except ImportError:
     pass
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def callback(
     ctx: typer.Context,
     version: Optional[bool] = typer.Option(
@@ -42,6 +50,7 @@ def callback(
         "-v",
         help="Show version and exit",
         is_eager=True,
+        callback=version_callback,
     ),
 ):
     """
@@ -58,8 +67,8 @@ def callback(
         podio app list
         podio task create --json-file task.json
     """
-    if version:
-        typer.echo("podio-cli version 0.1.0")
+    if ctx.invoked_subcommand is None and not version:
+        typer.echo(ctx.get_help())
         raise typer.Exit()
 
 

@@ -4,11 +4,14 @@ A command-line interface for the Podio API built with Python and Typer. Automate
 
 ## Features
 
-- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces, comments, files)
+- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces, comments, files, webhooks, conversations)
 - **JSON output** - Perfect for scripting and automation
 - **Environment-based authentication** - Secure credential management via .env
-- **Comprehensive coverage** - Support for items, apps, tasks, spaces, comments, and files
+- **Comprehensive coverage** - Support for items, apps, tasks, spaces, comments, files, webhooks, and conversations
 - **File management** - Upload, attach, download, and copy files
+- **Webhook support** - Create, manage, and validate webhooks including field-level webhooks
+- **Conversation management** - Direct messages, object conversations, search, and events
+- **App field management** - Add, update, delete, and export application fields
 - **Stdin/stdout support** - Easy integration with bash pipelines
 
 ## Installation
@@ -220,6 +223,16 @@ podio app activate <app_id>
 
 # Deactivate an app
 podio app deactivate <app_id>
+
+# Export app to Excel
+podio app export <app_id> [--output file.xlsx] [--format xlsx|xls] [--limit N]
+
+# Manage app fields
+podio app field list <app_id>
+podio app field get <app_id> <field_id>
+podio app field add <app_id> --json-file field.json
+podio app field update <app_id> <field_id> --json-file field.json
+podio app field delete <app_id> <field_id>
 ```
 
 **Examples:**
@@ -236,6 +249,23 @@ podio app list
 
 # Get first 100 items from an app
 podio app items 30529466 --limit 100
+
+# Export app to Excel file
+podio app export 30529466
+podio app export 30529466 --output my_export.xlsx
+podio app export 30529466 --format xls --limit 1000
+
+# List all fields in an app
+podio app field list 30529466
+
+# Get a specific field
+podio app field get 30529466 274720804
+
+# Add a new field to an app
+podio app field add 30529466 --json-file new_field.json
+
+# Delete a field
+podio app field delete 30529466 274720804
 ```
 
 ### Item Commands
@@ -258,8 +288,14 @@ podio item update <item_id> [--json-file file.json] [--silent] [--no-hook]
 # Delete an item
 podio item delete <item_id> [--silent] [--no-hook]
 
-# Get item field values
+# Get item field values (v2 API - clean format)
 podio item values <item_id>
+
+# Get a specific field value
+podio item field-value <item_id> <field_id_or_external_id>
+
+# Get item by external ID
+podio item get-by-external-id <app_id> <external_id>
 ```
 
 **Examples:**
@@ -281,6 +317,19 @@ podio item update 12345 --json-file update.json --silent
 
 # Delete item without triggering webhooks
 podio item delete 12345 --no-hook
+
+# Get all field values for an item (v2 API)
+podio item values 12345
+podio item values 12345 --table
+
+# Get a specific field value by field ID or external_id
+podio item field-value 12345 274720804
+podio item field-value 12345 potential-writer
+podio item field-value 12345 status --table
+
+# Get item by external ID
+podio item get-by-external-id 30543397 my-custom-id
+podio item get-by-external-id 12345 invoice-2024-001 --table
 ```
 
 **Item Data Format:**
@@ -375,6 +424,12 @@ podio task complete <task_id>
 
 # Delete a task
 podio task delete <task_id>
+
+# Task labels
+podio task list-labels
+podio task create-label <text> [--color <hex_or_name>]
+podio task update-labels <task_id> --labels <comma_separated_ids_or_names>
+podio task delete-label <label_id>
 ```
 
 **Examples:**
@@ -393,6 +448,22 @@ podio task complete 99999
 
 # Update task text
 podio task update 99999 --text "Updated description"
+
+# List all task labels
+podio task list-labels
+podio task list-labels --table
+
+# Create a new label
+podio task create-label "High Priority"
+podio task create-label "Urgent" --color red
+podio task create-label "Review" --color "#FF5733"
+
+# Update labels on a task
+podio task update-labels 12345 --labels "123,456"
+podio task update-labels 12345 --labels "High Priority,Urgent"
+
+# Delete a label
+podio task delete-label 12345
 ```
 
 **Task Data Format:**
@@ -500,6 +571,136 @@ podio space list
 
 # Find space by URL
 podio space find-by-url https://podio.com/ata-learning-llc/progress-content-management
+```
+
+### Webhook Commands
+
+Manage webhooks for Podio objects (items, apps, spaces).
+
+```bash
+# Create a webhook for an object
+podio webhook create <ref_type> <ref_id> <url>
+
+# List webhooks for an object
+podio webhook list <ref_type> <ref_id>
+
+# Request verification for a webhook
+podio webhook verify <hook_id>
+
+# Validate a webhook with verification code
+podio webhook validate <hook_id> <code>
+
+# Update a webhook URL
+podio webhook update <hook_id> <url>
+
+# Delete a webhook
+podio webhook delete <hook_id>
+
+# Field-level webhooks (fires only when specific field changes)
+podio webhook create-field <app_id> <field_id> <url>
+podio webhook list-field <app_id> <field_id>
+podio webhook update-field <hook_id> <url>
+```
+
+**Examples:**
+```bash
+# Create a webhook for an app
+podio webhook create app 30529466 https://myserver.com/webhook
+
+# List all webhooks on an item
+podio webhook list item 12345
+
+# Create a field-level webhook
+podio webhook create-field 30529466 274720804 https://myserver.com/field-webhook
+
+# Request webhook verification
+podio webhook verify 98765
+
+# Validate with the code sent to your webhook URL
+podio webhook validate 98765 abc123
+
+# Update webhook URL
+podio webhook update 98765 https://newserver.com/webhook
+
+# Delete a webhook
+podio webhook delete 98765
+```
+
+**Valid Reference Types:**
+- `app` - Application-level webhooks
+- `item` - Item-level webhooks
+- `space` - Space-level webhooks
+
+### Conversation Commands
+
+Manage Podio conversations (direct messages and object-based discussions).
+
+```bash
+# List all conversations
+podio conversation list [--limit 20] [--offset 0]
+
+# Get a specific conversation
+podio conversation get <conversation_id>
+
+# Create a new conversation
+podio conversation create --subject "Topic" --text "Message" --participants "user1,user2"
+
+# Reply to a conversation
+podio conversation reply <conversation_id> --text "Reply message"
+
+# Add participants to a conversation
+podio conversation add-participants <conversation_id> --users "user1,user2"
+
+# Mark conversation as read/unread
+podio conversation mark-read <conversation_id>
+podio conversation mark-unread <conversation_id>
+
+# Star/unstar a conversation
+podio conversation star <conversation_id>
+podio conversation unstar <conversation_id>
+
+# Leave a conversation
+podio conversation leave <conversation_id>
+
+# Search conversations
+podio conversation search --text "search query"
+
+# Get conversation events (messages)
+podio conversation events <conversation_id> [--limit 100]
+
+# Object-based conversations
+podio conversation on-object <ref_type> <ref_id>
+podio conversation create-on-object <ref_type> <ref_id> --text "Message"
+```
+
+**Examples:**
+```bash
+# List recent conversations
+podio conversation list --limit 10
+
+# Get a specific conversation with all messages
+podio conversation get 12345678
+
+# Start a new conversation
+podio conversation create --subject "Project Update" --text "Here's the status..." --participants "123,456"
+
+# Reply to a conversation
+podio conversation reply 12345678 --text "Thanks for the update!"
+
+# Search for conversations
+podio conversation search --text "budget"
+
+# Get all conversations on an item
+podio conversation on-object item 12345
+
+# Create a conversation on a task
+podio conversation create-on-object task 67890 --text "Discussion about this task"
+
+# Star an important conversation
+podio conversation star 12345678
+
+# Mark conversation as read
+podio conversation mark-read 12345678
 ```
 
 ## Automation Examples
@@ -661,8 +862,12 @@ pypodio-cli/
 │       ├── item.py          # Item commands
 │       ├── task.py          # Task commands
 │       ├── space.py         # Space commands
+│       ├── org.py           # Organization commands
+│       ├── auth.py          # Authentication commands
 │       ├── comment.py       # Comment commands
-│       └── file.py          # File upload/attach commands
+│       ├── file.py          # File upload/attach commands
+│       ├── webhook.py       # Webhook management
+│       └── conversation.py  # Conversation/messaging commands
 ├── tests/
 ├── pyproject.toml
 └── README.md
@@ -740,6 +945,16 @@ For issues and questions:
 - Open an issue on GitHub
 
 ## Changelog
+
+### v0.1.1 (2025-12-30)
+
+- Fixed `--version` flag to work standalone without requiring a command
+- Added comprehensive documentation for all commands
+- Documented webhook commands (create, list, verify, validate, update, delete, field-level webhooks)
+- Documented conversation commands (list, get, create, reply, search, events, object conversations)
+- Documented app export and field management commands
+- Documented item values, field-value, and get-by-external-id commands
+- Documented task label commands (list-labels, create-label, update-labels, delete-label)
 
 ### v0.1.0 (2025-11-04)
 
