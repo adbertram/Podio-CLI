@@ -25,7 +25,7 @@ app = typer.Typer(
 # Import and register command modules
 # These will be imported as they're created
 try:
-    from .commands import item, app as app_cmd, task, space, org, auth, comment, webhook, conversation, file
+    from .commands import item, app as app_cmd, task, space, org, auth, comment, webhook, conversation, file, webform
     app.add_typer(item.app, name="item", help="Manage Podio items")
     app.add_typer(app_cmd.app, name="app", help="Manage Podio applications")
     app.add_typer(task.app, name="task", help="Manage Podio tasks")
@@ -36,6 +36,7 @@ try:
     app.add_typer(webhook.app, name="webhook", help="Manage Podio webhooks")
     app.add_typer(conversation.app, name="conversation", help="Manage Podio conversations")
     app.add_typer(file.app, name="file", help="Manage Podio files")
+    app.add_typer(webform.app, name="webform", help="Manage Podio webforms")
 except ImportError:
     # Commands not yet implemented - will add as we build them
     pass

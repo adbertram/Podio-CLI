@@ -4,7 +4,7 @@ A command-line interface for the Podio API built with Python and Typer. Automate
 
 ## Features
 
-- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces, comments, files, webhooks, conversations)
+- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces, comments, files, webhooks, conversations, webforms)
 - **JSON output** - Perfect for scripting and automation
 - **Environment-based authentication** - Secure credential management via .env
 - **Comprehensive coverage** - Support for items, apps, tasks, spaces, comments, files, webhooks, and conversations
@@ -703,6 +703,51 @@ podio conversation star 12345678
 podio conversation mark-read 12345678
 ```
 
+### Webform Commands
+
+Manage Podio webforms (public forms for item creation).
+
+```bash
+# List all webforms for an app
+podio webform list <app_id>
+
+# Get a specific webform
+podio webform get <form_id>
+
+# Submit data to a webform via HTTP POST (like a browser)
+podio webform submit <webform_url> --json-file data.json
+```
+
+**Examples:**
+```bash
+# List webforms for an app
+podio webform list 30529466
+podio webform list 30529466 --table
+
+# Get webform details
+podio webform get 2581518
+podio webform get 2581518 --table
+
+# Submit to a webform using the public URL
+echo '{"title": "My Title", "synopsis": "Description text"}' | podio webform submit "https://podio.com/webforms/30560419/2584779"
+
+# Submit from a JSON file
+podio webform submit "https://podio.com/webforms/30560419/2584779" -f data.json
+```
+
+**Submit Data Format:**
+
+Use field external_id as keys (matches the webform field names):
+```json
+{
+  "title": "My Title",
+  "synopsis": "Some description text",
+  "category": "Option 1"
+}
+```
+
+**Note:** The submit command POSTs directly to the public webform URL, exactly like a browser would. No Podio authentication is required - it uses the public webform endpoint with CSRF token handling.
+
 ## Automation Examples
 
 ### Scripting with JSON Output
@@ -867,7 +912,8 @@ pypodio-cli/
 │       ├── comment.py       # Comment commands
 │       ├── file.py          # File upload/attach commands
 │       ├── webhook.py       # Webhook management
-│       └── conversation.py  # Conversation/messaging commands
+│       ├── conversation.py  # Conversation/messaging commands
+│       └── webform.py       # Webform management
 ├── tests/
 ├── pyproject.toml
 └── README.md

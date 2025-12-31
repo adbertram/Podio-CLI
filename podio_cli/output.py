@@ -96,7 +96,7 @@ def print_table(data: Any, title: Optional[str] = None):
 
     # Define priority columns that should be shown first (most important)
     priority_columns = [
-        'item_id', 'app_id', 'task_id', 'file_id', 'space_id', 'org_id',  # Primary IDs
+        'item_id', 'app_id', 'task_id', 'file_id', 'space_id', 'org_id', 'form_id',  # Primary IDs
         'app_item_id',  # Item sequence number
         'name', 'title', 'text',  # Names/content
         'status',  # Status
