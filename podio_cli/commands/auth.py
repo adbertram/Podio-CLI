@@ -114,17 +114,11 @@ def auth_status(
 
 @app.command("login")
 def auth_login(
-    flow_type: str = typer.Option(
+    auth_type: str = typer.Option(
         "client",
-        "--flow",
-        "-f",
-        help="OAuth flow type: 'client' (token, recommended) or 'server' (authorization code)"
-    ),
-    redirect_uri: str = typer.Option(
-        None,
-        "--redirect-uri",
-        "-r",
-        help="Redirect URI (defaults to PODIO_REDIRECT_URI env var)"
+        "--type",
+        "-t",
+        help="Authentication type: 'client' (token, recommended) or 'server' (authorization code)"
     ),
 ):
     """
@@ -134,8 +128,8 @@ def auth_login(
 
     Examples:
         podio auth login
-        podio auth login --flow client
-        podio auth login --flow server --redirect-uri https://example.com/callback
+        podio auth login --type client
+        podio auth login --type server
     """
     config = get_config()
 
@@ -149,15 +143,15 @@ def auth_login(
         typer.echo("  4. Add PODIO_CLIENT_SECRET=<your_client_secret> to .env", err=True)
         raise typer.Exit(2)
 
-    # Get redirect URI
-    uri = redirect_uri or config.redirect_uri
+    # Get redirect URI from config or use default
+    uri = config.redirect_uri
     if not uri:
         # Use default Podio callback for client-side flow
         uri = "https://podio.com/oauth/callback"
         typer.echo(f"Using default redirect URI: {uri}", err=True)
 
-    # Generate URL based on flow type
-    if flow_type == "client":
+    # Generate URL based on auth type
+    if auth_type == "client":
         url = OAuthTokenAuthorization.get_authorization_url(
             client_id=config.client_id,
             redirect_uri=uri,
@@ -175,7 +169,7 @@ def auth_login(
         typer.echo("  PODIO_ACCESS_TOKEN=<token>", err=True)
         typer.echo("  PODIO_REFRESH_TOKEN=<refresh_token>", err=True)
 
-    elif flow_type == "server":
+    elif auth_type == "server":
         url = OAuthAuthorizationCodeAuthorization.get_authorization_url(
             client_id=config.client_id,
             redirect_uri=uri,
@@ -192,16 +186,16 @@ def auth_login(
         typer.echo(f"  PODIO_REDIRECT_URI={uri}", err=True)
 
     else:
-        print_error(f"Invalid flow type: {flow_type}. Use 'client' or 'server'")
+        print_error(f"Invalid auth type: {auth_type}. Use 'client' or 'server'")
         raise typer.Exit(1)
 
     # Output the URL as JSON for scripting
-    print_json({"authorization_url": url, "flow_type": flow_type, "redirect_uri": uri})
+    print_json({"authorization_url": url, "auth_type": auth_type, "redirect_uri": uri})
 
 
 @app.command("logout")
 def auth_logout(
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation prompt"),
 ):
     """
     Clear stored credentials and tokens.
@@ -210,11 +204,11 @@ def auth_logout(
 
     Examples:
         podio auth logout
-        podio auth logout --yes
+        podio auth logout --force
     """
     config = get_config()
 
-    if not yes:
+    if not force:
         typer.confirm("This will clear your Podio access tokens. Continue?", abort=True)
 
     # Clear tokens from .env

@@ -3,17 +3,32 @@ import typer
 import time
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from ..client import get_client
 from ..config import get_config
-from ..output import print_json, print_output, handle_api_error, format_response
+from ..output import print_json, print_output, print_error, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio applications")
 
 # Subcommand group for field operations
 field_app = typer.Typer(help="Manage application fields")
 app.add_typer(field_app, name="field")
+
+
+def _apply_properties_filter(data: Any, properties: str) -> Any:
+    """Filter response data to include only specified properties."""
+    if not properties:
+        return data
+
+    prop_list = [p.strip() for p in properties.split(",")]
+
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if k in prop_list}
+    elif isinstance(data, list):
+        return [{k: v for k, v in item.items() if k in prop_list} for item in data]
+
+    return data
 
 
 @app.command("get")
@@ -51,6 +66,8 @@ def get_app(
 @app.command("list")
 def list_apps(
     space_id: Optional[int] = typer.Option(None, "--space-id", "-s", help="Space ID to list apps from (defaults to PODIO_WORKSPACE_ID)"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum apps to return"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
@@ -61,6 +78,8 @@ def list_apps(
     Examples:
         podio app list --space-id 87654321
         podio app list  # Uses PODIO_WORKSPACE_ID
+        podio app list --limit 10
+        podio app list --properties "app_id,name,link"
         podio app list --table
     """
     try:
@@ -70,13 +89,21 @@ def list_apps(
             if config.workspace_id:
                 space_id = int(config.workspace_id)
             else:
-                raise ValueError(
-                    "No space_id provided and PODIO_WORKSPACE_ID not set in environment"
-                )
+                print_error("No space_id provided and PODIO_WORKSPACE_ID not set in environment")
+                raise typer.Exit(1)
 
         client = get_client()
         result = client.Application.list_in_space(space_id=space_id)
         formatted = format_response(result)
+
+        # Apply limit (client-side)
+        if isinstance(formatted, list) and len(formatted) > limit:
+            formatted = formatted[:limit]
+
+        # Apply properties filter
+        if properties:
+            formatted = _apply_properties_filter(formatted, properties)
+
         print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)

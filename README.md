@@ -141,15 +141,44 @@ PODIO_WORKSPACE_ID=your_default_space_id
 ### Authentication Command Reference
 
 ```bash
-# Generate OAuth authorization URL (server-side flow)
-podio auth url --flow server --redirect-uri https://your-app.com/callback
+# Check authentication status (exit code 2 if not authenticated)
+podio auth status
 
-# Generate OAuth authorization URL (client-side flow)
-podio auth url --flow client --redirect-uri https://your-app.com/callback
+# Initiate OAuth login flow
+podio auth login [--type client|server]
+
+# Logout and clear credentials
+podio auth logout [--force]
+
+# Save tokens to .env file
+podio auth save <access_token> <refresh_token>
+
+# Generate OAuth authorization URL
+podio auth url [--type client|server]
 
 # Parse callback URL to extract tokens/codes
-podio auth parse-callback "https://your-app.com/callback?code=..."
-podio auth parse-callback "https://your-app.com/callback#access_token=..."
+podio auth parse-callback "<callback_url>"
+
+# Manually refresh access token
+podio auth refresh
+```
+
+**Examples:**
+```bash
+# Check if authenticated
+podio auth status
+
+# Start client-side OAuth flow
+podio auth login --type client
+
+# Logout (with confirmation)
+podio auth logout
+
+# Force logout without confirmation
+podio auth logout --force
+
+# Save tokens after manual authentication
+podio auth save abc123_access_token xyz789_refresh_token
 ```
 
 ## Rate Limiting & Retries
@@ -213,7 +242,10 @@ Manage Podio applications.
 podio app get <app_id>
 
 # List all apps in a space
-podio app list [--space-id <space_id>]  # Uses PODIO_WORKSPACE_ID if not provided
+podio app list [--space-id <space_id>] [--limit 100] [--properties "field1,field2"]  # Uses PODIO_WORKSPACE_ID if not provided
+
+# Create a new app
+podio app create <space_id> --json-file app.json
 
 # Get all items from an app
 podio app items <app_id> [--limit 30] [--offset 0]
@@ -276,8 +308,11 @@ Manage Podio items (create, read, update, delete).
 # Get a single item
 podio item get <item_id> [--basic]
 
-# Filter items in an app
-podio item filter <app_id> [--filters '{"status": "active"}'] [--limit 30] [--offset 0] [--sort-by field] [--desc]
+# Get item by external ID
+podio item get --external-id <id> --app-id <app_id>
+
+# List/filter items in an app
+podio item list <app_id> [--filter '{"status": "active"}'] [--limit 100] [--properties "field1,field2"] [--sort-by field] [--desc]
 
 # Create a new item
 podio item create <app_id> [--json-file file.json] [--silent] [--no-hook]
@@ -293,9 +328,6 @@ podio item values <item_id>
 
 # Get a specific field value
 podio item field-value <item_id> <field_id_or_external_id>
-
-# Get item by external ID
-podio item get-by-external-id <app_id> <external_id>
 ```
 
 **Examples:**
@@ -303,8 +335,14 @@ podio item get-by-external-id <app_id> <external_id>
 # Get item with basic info
 podio item get 12345 --basic
 
-# Filter active items
-podio item filter 30529466 --filters '{"status": "active"}' --limit 50
+# Get item by external ID
+podio item get --external-id my-custom-id --app-id 30543397
+
+# List active items
+podio item list 30529466 --filter '{"status": "active"}' --limit 50
+
+# List items with specific properties
+podio item list 30529466 --properties "item_id,title,status"
 
 # Create item from JSON file
 podio item create 30529466 --json-file new_article.json
@@ -326,10 +364,6 @@ podio item values 12345 --table
 podio item field-value 12345 274720804
 podio item field-value 12345 potential-writer
 podio item field-value 12345 status --table
-
-# Get item by external ID
-podio item get-by-external-id 30543397 my-custom-id
-podio item get-by-external-id 12345 invoice-2024-001 --table
 ```
 
 **Item Data Format:**
@@ -637,19 +671,22 @@ Manage Podio conversations (direct messages and object-based discussions).
 
 ```bash
 # List all conversations
-podio conversation list [--limit 20] [--offset 0]
+podio conversation list [--limit 100] [--filter "field:value"] [--properties "field1,field2"]
 
 # Get a specific conversation
 podio conversation get <conversation_id>
 
-# Create a new conversation
+# Create a new conversation (direct)
 podio conversation create --subject "Topic" --text "Message" --participants "user1,user2"
+
+# Create a conversation on an object
+podio conversation create --ref-type item --ref-id 12345 --subject "Topic" --text "Message"
 
 # Reply to a conversation
 podio conversation reply <conversation_id> --text "Reply message"
 
 # Add participants to a conversation
-podio conversation add-participants <conversation_id> --users "user1,user2"
+podio conversation participant add <conversation_id> --users "user1,user2"
 
 # Mark conversation as read/unread
 podio conversation mark-read <conversation_id>
@@ -670,7 +707,6 @@ podio conversation events <conversation_id> [--limit 100]
 
 # Object-based conversations
 podio conversation on-object <ref_type> <ref_id>
-podio conversation create-on-object <ref_type> <ref_id> --text "Message"
 ```
 
 **Examples:**
@@ -681,20 +717,23 @@ podio conversation list --limit 10
 # Get a specific conversation with all messages
 podio conversation get 12345678
 
-# Start a new conversation
+# Start a new direct conversation
 podio conversation create --subject "Project Update" --text "Here's the status..." --participants "123,456"
+
+# Create a conversation on an item
+podio conversation create --ref-type item --ref-id 12345 --subject "Question" --text "Need help with this"
 
 # Reply to a conversation
 podio conversation reply 12345678 --text "Thanks for the update!"
+
+# Add participants
+podio conversation participant add 12345678 --users "789,012"
 
 # Search for conversations
 podio conversation search --text "budget"
 
 # Get all conversations on an item
 podio conversation on-object item 12345
-
-# Create a conversation on a task
-podio conversation create-on-object task 67890 --text "Discussion about this task"
 
 # Star an important conversation
 podio conversation star 12345678

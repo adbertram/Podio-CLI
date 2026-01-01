@@ -337,5 +337,16 @@ def format_response(data: Any) -> Any:
     return data
 
 
-# Alias for cli-tools standard compliance
-handle_error = handle_api_error
+def handle_error(error: Exception) -> int:
+    """
+    Handle errors and return appropriate exit code.
+
+    Wrapper for handle_api_error for CLI standards compliance.
+
+    Args:
+        error: Exception from API call
+
+    Returns:
+        int: Exit code (1 for general errors, 2 for auth errors)
+    """
+    return handle_api_error(error)

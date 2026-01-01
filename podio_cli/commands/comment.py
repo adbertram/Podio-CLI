@@ -1,7 +1,7 @@
 """Comment commands for Podio CLI."""
 import json
 import sys
-from typing import Optional
+from typing import Optional, Any
 from pathlib import Path
 import typer
 
@@ -9,6 +9,42 @@ from ..client import get_client
 from ..output import print_json, print_output, print_error, print_success, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio comments")
+
+
+def _apply_properties_filter(data: Any, properties: str) -> Any:
+    """Filter response data to include only specified properties."""
+    if not properties:
+        return data
+
+    prop_list = [p.strip() for p in properties.split(",")]
+
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if k in prop_list}
+    elif isinstance(data, list):
+        return [{k: v for k, v in item.items() if k in prop_list} for item in data]
+
+    return data
+
+
+def _apply_client_filter(data: Any, filter_str: str) -> Any:
+    """Apply client-side filtering based on key:value pairs."""
+    if not filter_str or not isinstance(data, list):
+        return data
+
+    filters = {}
+    for part in filter_str.split(","):
+        if ":" in part:
+            key, value = part.split(":", 1)
+        elif "=" in part:
+            key, value = part.split("=", 1)
+        else:
+            continue
+        filters[key.strip()] = value.strip()
+
+    return [
+        item for item in data
+        if all(str(item.get(k, "")).lower() == v.lower() for k, v in filters.items())
+    ]
 
 
 @app.command("create")
@@ -96,8 +132,10 @@ def create_comment(
 def list_comments(
     ref_type: str = typer.Argument(..., help="Object type (e.g., 'item', 'status')"),
     ref_id: int = typer.Argument(..., help="Object ID"),
-    limit: int = typer.Option(100, "--limit", help="Maximum comments to return"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum comments to return"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+    filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter by field:value"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
@@ -106,7 +144,8 @@ def list_comments(
     Examples:
         podio comment list item 12345
         podio comment list item 12345 --limit 50
-        podio comment list item 12345 --offset 10
+        podio comment list item 12345 --filter "created_by.name:Adam"
+        podio comment list item 12345 --properties "comment_id,value"
         podio comment list item 12345 --table
     """
     try:
@@ -118,6 +157,15 @@ def list_comments(
             offset=offset
         )
         formatted = format_response(result)
+
+        # Apply client-side filtering
+        if filter and isinstance(formatted, list):
+            formatted = _apply_client_filter(formatted, filter)
+
+        # Apply properties filter
+        if properties:
+            formatted = _apply_properties_filter(formatted, properties)
+
         print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)

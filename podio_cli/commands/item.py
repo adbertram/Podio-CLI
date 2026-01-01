@@ -1,33 +1,83 @@
 """Item commands for Podio CLI."""
 import json
 import sys
-from typing import Optional
+from typing import Optional, List, Any, Dict
 from pathlib import Path
 import typer
 
 from ..client import get_client
-from ..output import print_json, print_output, print_error, print_success, handle_api_error, format_response
+from ..output import print_json, print_output, print_error, print_success, print_warning, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio items")
 
 
+def _apply_properties_filter(data: Any, properties: str) -> Any:
+    """
+    Filter response data to include only specified properties.
+
+    Args:
+        data: Response data (list of dicts or single dict)
+        properties: Comma-separated list of field names to include
+
+    Returns:
+        Filtered data with only specified properties
+    """
+    if not properties:
+        return data
+
+    prop_list = [p.strip() for p in properties.split(",")]
+
+    if isinstance(data, dict):
+        if 'items' in data and isinstance(data['items'], list):
+            # Handle wrapped response
+            data['items'] = [
+                {k: v for k, v in item.items() if k in prop_list}
+                for item in data['items']
+            ]
+        else:
+            data = {k: v for k, v in data.items() if k in prop_list}
+    elif isinstance(data, list):
+        data = [
+            {k: v for k, v in item.items() if k in prop_list}
+            for item in data
+        ]
+
+    return data
+
+
 @app.command("get")
 def get_item(
-    item_id: int = typer.Argument(..., help="Item ID to retrieve"),
+    item_id: Optional[int] = typer.Argument(None, help="Item ID to retrieve"),
+    external_id: Optional[str] = typer.Option(None, "--external-id", "-e", help="External ID to look up (requires --app-id)"),
+    app_id: Optional[int] = typer.Option(None, "--app-id", "-a", help="App ID (required with --external-id)"),
     basic: bool = typer.Option(False, "--basic", help="Get basic item info only"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
-    Get a Podio item by ID.
+    Get a Podio item by ID or external ID.
 
     Examples:
         podio item get 12345
         podio item get 12345 --basic
+        podio item get --external-id my-custom-id --app-id 30543397
         podio item get 12345 --table
     """
     try:
         client = get_client()
-        result = client.Item.find(item_id=item_id, basic=basic)
+
+        if external_id:
+            # Look up by external ID
+            if not app_id:
+                print_error("--app-id is required when using --external-id")
+                raise typer.Exit(1)
+            result = client.Item.find_by_external_id(app_id=app_id, external_id=external_id)
+        elif item_id:
+            # Look up by item ID
+            result = client.Item.find(item_id=item_id, basic=basic)
+        else:
+            print_error("Either item_id argument or --external-id option is required")
+            raise typer.Exit(1)
+
         formatted = format_response(result)
         print_output(formatted, table=table)
     except Exception as e:
@@ -35,16 +85,23 @@ def get_item(
         raise typer.Exit(exit_code)
 
 
-@app.command("filter")
-def filter_items(
-    app_id: int = typer.Argument(..., help="Application ID to filter items from"),
-    filters: Optional[str] = typer.Option(
+@app.command("list")
+def list_items(
+    app_id: int = typer.Argument(..., help="Application ID to list items from"),
+    filter: Optional[str] = typer.Option(
         None,
-        "--filters",
+        "--filter",
+        "-f",
         help='JSON filter object (e.g., \'{"status": "active"}\')',
     ),
-    limit: int = typer.Option(30, "--limit", help="Maximum number of items to return"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of items to return"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+    properties: Optional[str] = typer.Option(
+        None,
+        "--properties",
+        "-p",
+        help="Comma-separated list of fields to include in output",
+    ),
     sort_by: Optional[str] = typer.Option(
         None,
         "--sort-by",
@@ -54,14 +111,15 @@ def filter_items(
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
-    Filter items in a Podio application.
+    List items in a Podio application with optional filtering.
 
     Examples:
-        podio item filter 12345
-        podio item filter 12345 --filters '{"status": "active"}'
-        podio item filter 12345 --limit 100 --offset 0
-        podio item filter 12345 --sort-by "created_on" --desc
-        podio item filter 12345 --table
+        podio item list 12345
+        podio item list 12345 --filter '{"status": "active"}'
+        podio item list 12345 --limit 50 --offset 0
+        podio item list 12345 --sort-by "created_on" --desc
+        podio item list 12345 --properties "item_id,title,status"
+        podio item list 12345 --table
     """
     try:
         client = get_client()
@@ -73,12 +131,12 @@ def filter_items(
         }
 
         # Parse JSON filters if provided
-        if filters:
+        if filter:
             try:
-                filter_dict = json.loads(filters)
+                filter_dict = json.loads(filter)
                 attributes["filters"] = filter_dict
             except json.JSONDecodeError as e:
-                print_error(f"Invalid JSON in --filters: {e}")
+                print_error(f"Invalid JSON in --filter: {e}")
                 raise typer.Exit(1)
 
         # Add sorting if specified
@@ -88,6 +146,11 @@ def filter_items(
 
         result = client.Item.filter(app_id=app_id, attributes=attributes)
         formatted = format_response(result)
+
+        # Apply properties filter if specified
+        if properties:
+            formatted = _apply_properties_filter(formatted, properties)
+
         print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
@@ -299,22 +362,18 @@ def get_field_value(
         raise typer.Exit(exit_code)
 
 
-@app.command("get-by-external-id")
+@app.command("get-by-external-id", hidden=True)
 def get_item_by_external_id(
     app_id: int = typer.Argument(..., help="Application ID"),
     external_id: str = typer.Argument(..., help="External ID of the item"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
+    [DEPRECATED] Use 'podio item get --external-id <id> --app-id <app_id>' instead.
+
     Get a Podio item by external ID within a specific app.
-
-    If multiple items have the same external_id, returns just one.
-
-    Examples:
-        podio item get-by-external-id 30543397 my-custom-id
-        podio item get-by-external-id 12345 invoice-2024-001
-        podio item get-by-external-id 12345 invoice-2024-001 --table
     """
+    print_warning("'podio item get-by-external-id' is deprecated. Use 'podio item get --external-id <id> --app-id <app_id>' instead.")
     try:
         client = get_client()
         result = client.Item.find_by_external_id(app_id=app_id, external_id=external_id)

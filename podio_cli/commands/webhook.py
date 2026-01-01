@@ -2,12 +2,129 @@
 import typer
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from ..client import get_client
-from ..output import print_json, print_output, handle_api_error, format_response
+from ..output import print_json, print_output, print_success, print_warning, handle_api_error, format_response
 
 app = typer.Typer(help="Manage Podio webhooks")
+
+# Subcommand group for field-level webhook operations
+field_app = typer.Typer(help="Manage field-level webhooks")
+app.add_typer(field_app, name="field")
+
+
+def _apply_properties_filter(data: Any, properties: str) -> Any:
+    """Filter response data to include only specified properties."""
+    if not properties:
+        return data
+
+    prop_list = [p.strip() for p in properties.split(",")]
+
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if k in prop_list}
+    elif isinstance(data, list):
+        return [{k: v for k, v in item.items() if k in prop_list} for item in data]
+
+    return data
+
+
+def _apply_client_filter(data: Any, filter_str: str) -> Any:
+    """Apply client-side filtering based on key:value pairs."""
+    if not filter_str or not isinstance(data, list):
+        return data
+
+    filters = {}
+    for part in filter_str.split(","):
+        if ":" in part:
+            key, value = part.split(":", 1)
+        elif "=" in part:
+            key, value = part.split("=", 1)
+        else:
+            continue
+        filters[key.strip()] = value.strip()
+
+    return [
+        item for item in data
+        if all(str(item.get(k, "")).lower() == v.lower() for k, v in filters.items())
+    ]
+
+
+@field_app.command("create")
+def field_create(
+    field_id: int = typer.Argument(..., help="Field ID to create webhook for"),
+    url: str = typer.Option(..., "--url", "-u", help="Webhook URL to receive POST requests"),
+    type: str = typer.Option("item.update", "--type", help="Event type to trigger on"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Create a field-level webhook that only fires when a specific field is updated.
+
+    Examples:
+        podio webhook field create 12345 --url https://example.com/webhook
+        podio webhook field create 12345 -u https://webhook.site/abc123 --type item.update
+    """
+    try:
+        client = get_client()
+        attributes = {"url": url, "type": type}
+        result = client.Hook.create(
+            hookable_type="app_field",
+            hookable_id=field_id,
+            attributes=attributes
+        )
+        formatted = format_response(result)
+        print_success(f"Field webhook created (ID: {result.get('hook_id')})")
+        print(f"Note: Verify with 'podio webhook verify {result.get('hook_id')}'", file=sys.stderr)
+        print_output(formatted, table=table)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@field_app.command("list")
+def field_list(
+    field_id: int = typer.Argument(..., help="Field ID to list webhooks for"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    List all webhooks for a specific field.
+
+    Examples:
+        podio webhook field list 12345
+        podio webhook field list 12345 --table
+    """
+    try:
+        client = get_client()
+        result = client.Hook.find_all(hookable_type="app_field", hookable_id=field_id)
+        formatted = format_response(result)
+        print_output(formatted, table=table)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@field_app.command("update")
+def field_update(
+    hook_id: int = typer.Argument(..., help="Webhook ID to update"),
+    url: str = typer.Option(..., "--url", "-u", help="New webhook URL"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Update a field-level webhook URL.
+
+    Examples:
+        podio webhook field update 98765 --url https://newurl.com/webhook
+    """
+    try:
+        client = get_client()
+        attributes = {"url": url}
+        result = client.transport.PUT(url=f"/hook/{hook_id}", body=attributes)
+        formatted = format_response(result)
+        print_success(f"Webhook {hook_id} updated")
+        print_output(formatted, table=table)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
 
 
 @app.command("create")
@@ -61,63 +178,25 @@ def create_webhook(
         raise typer.Exit(exit_code)
 
 
-@app.command("create-field")
-def create_field_webhook(
+@app.command("create-field", hidden=True)
+def create_field_webhook_deprecated(
     field_id: int = typer.Argument(..., help="Field ID to create webhook for"),
     url: str = typer.Option(..., "--url", "-u", help="Webhook URL to receive POST requests"),
-    type: str = typer.Option("item.update", "--type", help="Event type to trigger on (e.g., 'item.create', 'item.update', 'item.delete')"),
+    type: str = typer.Option("item.update", "--type", help="Event type to trigger on"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
-    """
-    Create a field-level webhook that only fires when a specific field is updated.
-
-    This creates a webhook at the field level using ref_type='app_field'.
-    The webhook will only trigger when the specified field changes.
-
-    Event types: item.create, item.update, item.delete
-
-    IMPORTANT - AUTOMATIC VERIFICATION:
-    Immediately after creation, Podio sends a hook.verify event to your URL with a
-    verification code. Your endpoint must handle this event and call 'podio webhook
-    validate' with the code to activate the webhook. Until validated, the webhook
-    remains 'inactive' and will not receive events.
-
-    See 'podio webhook verify --help' for detailed verification information.
-
-    Examples:
-        podio webhook create-field 123456 --url https://example.com/webhook --type item.update
-        podio webhook create-field 123456 -u https://webhook.site/abc123 --type item.update
-        podio webhook create-field 123456 -u https://example.com/hook --table
-    """
-    try:
-        client = get_client()
-
-        attributes = {
-            "url": url,
-            "type": type
-        }
-
-        # Use 'app_field' as the hookable_type for field-level webhooks
-        result = client.Hook.create(
-            hookable_type='app_field',
-            hookable_id=field_id,
-            attributes=attributes
-        )
-
-        formatted = format_response(result)
-        print(f"✓ Field-level webhook created successfully (ID: {result.get('hook_id')})", file=sys.stderr)
-        print(f"Note: You may need to verify the webhook. Use 'podio webhook verify {result.get('hook_id')}' to request verification.", file=sys.stderr)
-        print_output(formatted, table=table)
-
-    except Exception as e:
-        exit_code = handle_api_error(e)
-        raise typer.Exit(exit_code)
+    """[DEPRECATED] Use 'podio webhook field create' instead."""
+    print_warning("'podio webhook create-field' is deprecated. Use 'podio webhook field create' instead.")
+    return field_create(field_id=field_id, url=url, type=type, table=table)
 
 
 @app.command("list")
 def list_webhooks(
     hookable_type: str = typer.Argument(..., help="Type of object (e.g., 'app', 'space')"),
     hookable_id: int = typer.Argument(..., help="ID of the object"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum webhooks to return"),
+    filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter by field:value (e.g., 'status:active')"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
@@ -129,6 +208,9 @@ def list_webhooks(
     Examples:
         podio webhook list app 12345
         podio webhook list space 67890
+        podio webhook list app 12345 --limit 10
+        podio webhook list app 12345 --filter "status:active"
+        podio webhook list app 12345 --properties "hook_id,url,status"
         podio webhook list app 12345 --table
     """
     try:
@@ -168,6 +250,19 @@ def list_webhooks(
             result = result + field_webhooks
 
         formatted = format_response(result)
+
+        # Apply client-side filtering
+        if filter and isinstance(formatted, list):
+            formatted = _apply_client_filter(formatted, filter)
+
+        # Apply limit (client-side)
+        if isinstance(formatted, list) and len(formatted) > limit:
+            formatted = formatted[:limit]
+
+        # Apply properties filter
+        if properties:
+            formatted = _apply_properties_filter(formatted, properties)
+
         print_output(formatted, table=table)
 
     except Exception as e:
@@ -175,33 +270,14 @@ def list_webhooks(
         raise typer.Exit(exit_code)
 
 
-@app.command("list-field")
-def list_field_webhooks(
+@app.command("list-field", hidden=True)
+def list_field_webhooks_deprecated(
     field_id: int = typer.Argument(..., help="Field ID to list webhooks for"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
-    """
-    List all webhooks for a specific field.
-
-    This lists field-level webhooks using ref_type='app_field'.
-
-    Examples:
-        podio webhook list-field 123456
-        podio webhook list-field 123456 --table
-    """
-    try:
-        client = get_client()
-        result = client.Hook.find_all_for(
-            hookable_type='app_field',
-            hookable_id=field_id
-        )
-
-        formatted = format_response(result)
-        print_output(formatted, table=table)
-
-    except Exception as e:
-        exit_code = handle_api_error(e)
-        raise typer.Exit(exit_code)
+    """[DEPRECATED] Use 'podio webhook field list' instead."""
+    print_warning("'podio webhook list-field' is deprecated. Use 'podio webhook field list' instead.")
+    return field_list(field_id=field_id, table=table)
 
 
 @app.command("verify")
@@ -342,25 +418,19 @@ def update_webhook(
         raise typer.Exit(exit_code)
 
 
-@app.command("update-field")
-def update_field_webhook(
+@app.command("update-field", hidden=True)
+def update_field_webhook_deprecated(
     hook_id: int = typer.Argument(..., help="Field webhook ID to update"),
     field_id: int = typer.Argument(..., help="Field ID the webhook is attached to"),
     url: str = typer.Option(..., "--url", "-u", help="New webhook URL"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
-    Update a field-level webhook URL.
+    [DEPRECATED] Use 'podio webhook field update' instead.
 
-    This is implemented as delete + recreate since the Podio API does not support
-    direct webhook updates. The webhook will get a new hook_id but maintain the
-    same field_id and event type.
-
-    Examples:
-        podio webhook update-field 123456 274718394 --url https://new-endpoint.com/webhook
-        podio webhook update-field 123456 274718394 -u https://example.com/hook
-        podio webhook update-field 123456 274718394 -u https://example.com/hook --table
+    Update a field-level webhook URL using delete + recreate.
     """
+    print_warning("'podio webhook update-field' is deprecated. Use 'podio webhook field update' instead.")
     try:
         client = get_client()
 

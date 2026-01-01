@@ -3,7 +3,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 import requests
 import typer
@@ -14,9 +14,26 @@ from ..output import print_json, print_output, print_error, print_success, print
 app = typer.Typer(help="Manage Podio webforms")
 
 
+def _apply_properties_filter(data: Any, properties: str) -> Any:
+    """Filter response data to include only specified properties."""
+    if not properties:
+        return data
+
+    prop_list = [p.strip() for p in properties.split(",")]
+
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if k in prop_list}
+    elif isinstance(data, list):
+        return [{k: v for k, v in item.items() if k in prop_list} for item in data]
+
+    return data
+
+
 @app.command("list")
 def list_webforms(
     app_id: int = typer.Argument(..., help="Application ID to list webforms from"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum webforms to return"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
@@ -26,6 +43,8 @@ def list_webforms(
 
     Examples:
         podio webform list 12345
+        podio webform list 12345 --limit 10
+        podio webform list 12345 --properties "form_id,name,status"
         podio webform list 12345 --table
     """
     try:
@@ -33,6 +52,15 @@ def list_webforms(
         # Use raw transport since pypodio2 doesn't have Form area
         result = client.transport.GET(url=f"/form/app/{app_id}/")
         formatted = format_response(result)
+
+        # Apply limit (client-side)
+        if isinstance(formatted, list) and len(formatted) > limit:
+            formatted = formatted[:limit]
+
+        # Apply properties filter
+        if properties:
+            formatted = _apply_properties_filter(formatted, properties)
+
         print_output(formatted, table=table)
     except Exception as e:
         exit_code = handle_api_error(e)
