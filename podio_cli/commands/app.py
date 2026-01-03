@@ -351,8 +351,8 @@ def export_app(
 @field_app.command("add")
 def add_field(
     app_id: int = typer.Argument(..., help="Application ID to add field to"),
-    field_type: str = typer.Option(..., "--type", help="Field type (text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel)"),
-    label: str = typer.Option(..., "--label", "-l", help="Field label"),
+    field_type: Optional[str] = typer.Option(None, "--type", help="Field type (text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel)"),
+    label: Optional[str] = typer.Option(None, "--label", "-l", help="Field label"),
     required: bool = typer.Option(False, "--required", "-r", help="Whether field is required"),
     json_file: Optional[Path] = typer.Option(None, "--json-file", "-f", help="JSON file with full field configuration (overrides other options)"),
     mimetypes: Optional[str] = typer.Option(None, "--mimetypes", "-m", help="Allowed mimetypes for file fields (comma-separated, e.g., 'application/*,image/*')"),
@@ -363,6 +363,10 @@ def add_field(
 
     Supported field types: text, number, image, date, app, money, progress,
     location, duration, contact, calculation, embed, question, file, tel
+
+    You can either provide --type and --label options, or use --json-file for
+    full field configuration. When using --json-file, --type and --label are
+    not required.
 
     Examples:
         podio app field add 12345 --type text --label "Title"
@@ -376,7 +380,18 @@ def add_field(
         if json_file:
             with open(json_file, 'r') as f:
                 field_data = json_module.load(f)
+            # Extract label from JSON for success message
+            field_label = field_data.get('config', {}).get('label', 'field')
         else:
+            # Validate that --type and --label are provided when not using --json-file
+            if not field_type:
+                print_error("--type is required when not using --json-file")
+                raise typer.Exit(2)
+            if not label:
+                print_error("--label is required when not using --json-file")
+                raise typer.Exit(2)
+
+            field_label = label
             field_data = {
                 'type': field_type,
                 'config': {
@@ -400,7 +415,7 @@ def add_field(
         result = client.Application.add_field(app_id=app_id, attributes=field_data)
         formatted = format_response(result)
 
-        print(f"✓ Field '{label}' added successfully", file=sys.stderr)
+        print(f"✓ Field '{field_label}' added successfully", file=sys.stderr)
         print_output(formatted, table=table)
 
     except Exception as e:
