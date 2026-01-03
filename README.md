@@ -302,7 +302,31 @@ podio app field add 30529466 --json-file new_field.json
 
 # Delete a field
 podio app field delete 30529466 274720804
+
+# Update a field (e.g., add category option)
+podio app field update 30529466 274720804 --json-file updated_field.json
 ```
+
+**Field Update Data Format:**
+
+When updating a field, use `settings` at the root level (NOT nested under `config`):
+
+```json
+{
+  "label": "Status",
+  "settings": {
+    "options": [
+      {"id": 1, "status": "active", "text": "Option 1", "color": "DCEBD8"},
+      {"id": 2, "status": "active", "text": "Option 2", "color": "FF7373"},
+      {"status": "active", "text": "New Option", "color": "FFD700"}
+    ],
+    "multiple": false,
+    "display": "inline"
+  }
+}
+```
+
+**Important:** Include existing options with their `id` values to preserve them. New options should omit the `id` field.
 
 ### Item Commands
 
