@@ -239,7 +239,7 @@ Manage Podio applications.
 
 ```bash
 # Get application details
-podio app get <app_id>
+podio app get <app_id> [--fields] [--include-deleted]
 
 # List all apps in a space
 podio app list [--space-id <space_id>] [--limit 100] [--properties "field1,field2"]  # Uses PODIO_WORKSPACE_ID if not provided
@@ -271,6 +271,10 @@ podio app field delete <app_id> <field_id>
 ```bash
 # Get details of app 30529466
 podio app get 30529466
+
+# Get only field schema for an app
+podio app get 30529466 --fields
+podio app get 30529466 --fields --table
 
 # List all apps in space 10479826
 podio app list --space-id 10479826

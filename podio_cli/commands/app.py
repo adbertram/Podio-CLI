@@ -34,6 +34,7 @@ def _apply_properties_filter(data: Any, properties: str) -> Any:
 @app.command("get")
 def get_app(
     app_id: int = typer.Argument(..., help="Application ID to retrieve"),
+    fields: bool = typer.Option(False, "--fields", "-f", help="Return only the field schema"),
     include_deleted: bool = typer.Option(False, "--include-deleted", help="Include deleted fields in the response"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
@@ -42,9 +43,12 @@ def get_app(
 
     By default, deleted fields are excluded from the response.
     Use --include-deleted to show all fields including deleted ones.
+    Use --fields to return only the field schema.
 
     Examples:
         podio app get 12345
+        podio app get 12345 --fields
+        podio app get 12345 --fields --table
         podio app get 12345 --include-deleted
         podio app get 12345 --table
     """
@@ -55,6 +59,10 @@ def get_app(
         # Filter out deleted fields by default
         if not include_deleted and 'fields' in result:
             result['fields'] = [f for f in result['fields'] if f.get('status') != 'deleted']
+
+        # Return only fields if requested
+        if fields:
+            result = result.get('fields', [])
 
         formatted = format_response(result)
         print_output(formatted, table=table)
