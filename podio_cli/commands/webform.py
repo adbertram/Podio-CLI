@@ -13,6 +13,10 @@ from ..output import print_json, print_output, print_error, print_success, print
 
 app = typer.Typer(help="Manage Podio webforms")
 
+# Subcommand group for field operations
+field_app = typer.Typer(help="Manage webform fields")
+app.add_typer(field_app, name="field")
+
 
 def _apply_properties_filter(data: Any, properties: str) -> Any:
     """Filter response data to include only specified properties."""
@@ -257,3 +261,146 @@ def submit_webform(
             raise
         print_error(f"Error: {e}")
         raise typer.Exit(1)
+
+
+@field_app.command("add")
+def add_field_to_webform(
+    form_id: int = typer.Argument(..., help="Webform ID"),
+    field_id: int = typer.Argument(..., help="Field ID to add to the webform"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Add a field to a webform.
+
+    Adds an app field to the webform so it appears on the public form.
+
+    Examples:
+        podio webform field add 2584779 275324144
+        podio webform field add 2584779 275324144 --table
+    """
+    try:
+        client = get_client()
+
+        # Get current webform configuration
+        current_form = client.transport.GET(url=f"/form/{form_id}")
+
+        # Check if field already exists
+        existing_field_ids = [f.get('field_id') for f in current_form.get('fields', [])]
+        if field_id in existing_field_ids:
+            print_error(f"Field {field_id} is already on the webform")
+            raise typer.Exit(1)
+
+        # Build update payload with existing fields plus new one
+        fields = current_form.get('fields', [])
+        fields.append({'field_id': field_id})
+
+        update_data = {
+            'settings': current_form.get('settings', {}),
+            'domains': current_form.get('domains', []),
+            'fields': fields,
+            'attachments': current_form.get('attachments', False),
+        }
+
+        # Update the webform
+        result = client.transport.PUT(
+            url=f"/form/{form_id}",
+            body=json.dumps(update_data),
+            type='application/json'
+        )
+
+        print_success(f"Field {field_id} added to webform {form_id}")
+        formatted = format_response(result)
+        print_output(formatted, table=table)
+
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@field_app.command("remove")
+def remove_field_from_webform(
+    form_id: int = typer.Argument(..., help="Webform ID"),
+    field_id: int = typer.Argument(..., help="Field ID to remove from the webform"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Remove a field from a webform.
+
+    Removes an app field from the webform so it no longer appears on the public form.
+
+    Examples:
+        podio webform field remove 2584779 275324144
+        podio webform field remove 2584779 275324144 --table
+    """
+    try:
+        client = get_client()
+
+        # Get current webform configuration
+        current_form = client.transport.GET(url=f"/form/{form_id}")
+
+        # Check if field exists
+        existing_field_ids = [f.get('field_id') for f in current_form.get('fields', [])]
+        if field_id not in existing_field_ids:
+            print_error(f"Field {field_id} is not on the webform")
+            raise typer.Exit(1)
+
+        # Build update payload without the specified field
+        fields = [f for f in current_form.get('fields', []) if f.get('field_id') != field_id]
+
+        update_data = {
+            'settings': current_form.get('settings', {}),
+            'domains': current_form.get('domains', []),
+            'fields': fields,
+            'attachments': current_form.get('attachments', False),
+        }
+
+        # Update the webform
+        result = client.transport.PUT(
+            url=f"/form/{form_id}",
+            body=json.dumps(update_data),
+            type='application/json'
+        )
+
+        print_success(f"Field {field_id} removed from webform {form_id}")
+        formatted = format_response(result)
+        print_output(formatted, table=table)
+
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@field_app.command("list")
+def list_webform_fields(
+    form_id: int = typer.Argument(..., help="Webform ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    List all fields on a webform.
+
+    Shows the field IDs currently configured on the webform.
+
+    Examples:
+        podio webform field list 2584779
+        podio webform field list 2584779 --table
+    """
+    try:
+        client = get_client()
+        result = client.transport.GET(url=f"/form/{form_id}")
+
+        fields = result.get('fields', [])
+        field_ids = result.get('field_ids', [])
+
+        output = {
+            'form_id': form_id,
+            'field_count': len(fields),
+            'field_ids': field_ids,
+            'fields': fields,
+        }
+
+        formatted = format_response(output)
+        print_output(formatted, table=table)
+
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
