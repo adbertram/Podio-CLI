@@ -5,6 +5,7 @@ from typing import Any, List, Dict, Optional
 
 from rich.console import Console
 from rich.table import Table
+from rich import box
 
 
 # Rich console for table output - use wide width to prevent truncation
@@ -150,20 +151,12 @@ def print_table(data: Any, title: Optional[str] = None):
         title=title,
         show_header=True,
         header_style="bold cyan",
+        box=box.HEAVY_HEAD,
     )
 
-    # Add columns with appropriate settings
+    # Add columns - no_wrap=True for content-fitted columns
     for key in ordered_keys:
-        # Set different overflow behavior based on column type
-        if key.endswith('_id') or key in ['status', 'type']:
-            # ID and status columns - compact, no wrap
-            table.add_column(key, no_wrap=True)
-        elif key in ['name', 'title', 'text', 'item_name', 'url_label', 'description']:
-            # Name/text columns - allow reasonable width
-            table.add_column(key, no_wrap=True, max_width=40)
-        else:
-            # Other columns - allow wrapping with max width
-            table.add_column(key, overflow="ellipsis", max_width=30)
+        table.add_column(key, no_wrap=True)
 
     # Add rows
     for item in data:
@@ -286,35 +279,82 @@ def handle_api_error(error: Exception) -> int:
     """
     error_str = str(error)
 
+    # Try to extract friendly error message from TransportException
+    friendly_message = None
+    status_code = None
+
+    # Check if this is a TransportException with JSON error data
+    if "TransportException" in error_str:
+        # Extract the JSON portion after the colon
+        try:
+            # Split on "): " to separate headers from JSON body
+            parts = error_str.split("): ", 1)
+            if len(parts) == 2:
+                json_str = parts[1]
+                error_data = json.loads(json_str)
+
+                # Extract the friendly error description
+                if "error_description" in error_data:
+                    friendly_message = error_data["error_description"]
+                elif "error" in error_data:
+                    friendly_message = error_data["error"]
+
+                # Try to extract status code from headers dict
+                if "status" in parts[0]:
+                    import re
+                    match = re.search(r"'status':\s*'(\d+)'", parts[0])
+                    if match:
+                        status_code = match.group(1)
+        except (json.JSONDecodeError, ValueError, IndexError):
+            # If parsing fails, fall back to original error string
+            pass
+
+    # Use friendly message if available, otherwise use original error string
+    display_error = friendly_message if friendly_message else error_str
+
+    # Determine status code for error categorization
+    if not status_code:
+        # Fall back to searching in error string
+        if "401" in error_str or "unauthorized" in error_str.lower():
+            status_code = "401"
+        elif "404" in error_str or "not found" in error_str.lower():
+            status_code = "404"
+        elif "403" in error_str or "forbidden" in error_str.lower():
+            status_code = "403"
+        elif "420" in error_str or "429" in error_str or "rate limit" in error_str.lower():
+            status_code = "429"
+        elif "400" in error_str or "bad request" in error_str.lower():
+            status_code = "400"
+
     # Check for authentication errors
-    if "401" in error_str or "unauthorized" in error_str.lower():
+    if status_code == "401":
         print_error(
             "Authentication failed. Please check your credentials in .env file."
         )
         return 2
 
     # Check for not found errors
-    if "404" in error_str or "not found" in error_str.lower():
+    if status_code == "404":
         print_error("Resource not found.")
         return 1
 
     # Check for permission errors
-    if "403" in error_str or "forbidden" in error_str.lower():
+    if status_code == "403":
         print_error("Permission denied or invalid resource ID. Check that the ID is correct and you have access to this resource.")
         return 1
 
     # Check for rate limiting
-    if "420" in error_str or "rate limit" in error_str.lower():
+    if status_code in ("420", "429"):
         print_error("Rate limit exceeded. Please try again later.")
         return 1
 
     # Check for validation errors
-    if "400" in error_str or "bad request" in error_str.lower():
-        print_error(f"Invalid request: {error_str}")
+    if status_code == "400":
+        print_error(f"Invalid request: {display_error}")
         return 1
 
     # Generic error
-    print_error(f"API error: {error_str}")
+    print_error(f"API error: {display_error}")
     return 1
 
 
