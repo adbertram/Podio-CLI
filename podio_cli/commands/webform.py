@@ -3,7 +3,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 import requests
 import typer
@@ -16,6 +16,10 @@ app = typer.Typer(help="Manage Podio webforms")
 # Subcommand group for field operations
 field_app = typer.Typer(help="Manage webform fields")
 app.add_typer(field_app, name="field")
+
+# Subcommand group for attachment operations
+attachments_app = typer.Typer(help="Manage webform file attachments")
+app.add_typer(attachments_app, name="attachments")
 
 
 def _apply_properties_filter(data: Any, properties: str) -> Any:
@@ -33,10 +37,56 @@ def _apply_properties_filter(data: Any, properties: str) -> Any:
     return data
 
 
+def _apply_client_filter(data: list, filters: list) -> list:
+    """Apply client-side filtering using field:op:value syntax."""
+    if not filters or not isinstance(data, list):
+        return data
+
+    result = data
+    for f in filters:
+        parts = f.split(":", 2)
+        if len(parts) < 2:
+            continue
+
+        field = parts[0]
+        if len(parts) == 2:
+            # field:value format (exact match)
+            op, value = "eq", parts[1]
+        else:
+            # field:op:value format
+            op, value = parts[1], parts[2]
+
+        filtered = []
+        for item in result:
+            item_value = item.get(field)
+            if item_value is None:
+                continue
+
+            # Convert to string for comparison
+            item_str = str(item_value).lower()
+            value_str = value.lower()
+
+            if op == "eq" and item_str == value_str:
+                filtered.append(item)
+            elif op == "ne" and item_str != value_str:
+                filtered.append(item)
+            elif op == "contains" and value_str in item_str:
+                filtered.append(item)
+            elif op == "gt" and item_str > value_str:
+                filtered.append(item)
+            elif op == "lt" and item_str < value_str:
+                filtered.append(item)
+
+        result = filtered
+
+    return result
+
+
 @app.command("list")
 def list_webforms(
     app_id: int = typer.Argument(..., help="Application ID to list webforms from"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum webforms to return"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter (field:op:value)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
@@ -45,9 +95,14 @@ def list_webforms(
 
     Returns all webforms (active and disabled) configured on the given app.
 
+    Filter examples:
+        --filter "status:active"
+        --filter "name:contains:Contact"
+
     Examples:
         podio webform list 12345
         podio webform list 12345 --limit 10
+        podio webform list 12345 --filter "status:active"
         podio webform list 12345 --properties "form_id,name,status"
         podio webform list 12345 --table
     """
@@ -56,6 +111,10 @@ def list_webforms(
         # Use raw transport since pypodio2 doesn't have Form area
         result = client.transport.GET(url=f"/form/app/{app_id}/")
         formatted = format_response(result)
+
+        # Apply client-side filter if specified
+        if filter:
+            formatted = _apply_client_filter(formatted, filter)
 
         # Apply limit (client-side)
         if isinstance(formatted, list) and len(formatted) > limit:
@@ -125,6 +184,39 @@ def _parse_webform_url(url: str) -> tuple[int, int]:
     return int(match.group(1)), int(match.group(2))
 
 
+def _parse_form_id(form_id_or_url: str) -> int:
+    """Parse form_id from either a numeric ID or a webform URL.
+
+    Args:
+        form_id_or_url: Either a numeric form_id or a webform URL
+
+    Returns:
+        The form_id as an integer
+
+    Raises:
+        typer.BadParameter: If input is neither a valid integer nor a valid webform URL
+    """
+    # First, try to parse as integer
+    try:
+        return int(form_id_or_url)
+    except ValueError:
+        pass
+
+    # Try to parse as URL
+    if '/webforms/' in form_id_or_url:
+        try:
+            _, form_id = _parse_webform_url(form_id_or_url)
+            return form_id
+        except ValueError:
+            pass
+
+    # Neither worked - provide helpful error
+    raise typer.BadParameter(
+        f"'{form_id_or_url}' is not a valid form ID or webform URL.\n"
+        f"Expected: numeric form_id (e.g., 2584779) or URL (e.g., https://podio.com/webforms/12345/2584779)"
+    )
+
+
 @app.command("submit")
 def submit_webform(
     url: str = typer.Argument(..., help="Webform URL (e.g., https://podio.com/webforms/12345/67890)"),
@@ -133,6 +225,12 @@ def submit_webform(
         "--json-file",
         "-f",
         help="Path to JSON file with field data",
+    ),
+    attach: Optional[List[Path]] = typer.Option(
+        None,
+        "--attach",
+        "-a",
+        help="File(s) to attach to the submission (can be used multiple times)",
     ),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
@@ -149,9 +247,14 @@ def submit_webform(
             "category": "Option 1"
         }
 
+    File attachments require the webform to have attachments enabled.
+    Use 'podio webform attachments status <form>' to check.
+
     Examples:
         podio webform submit https://podio.com/webforms/30560419/2584779 -f data.json
-        echo '{"title": "Test", "synopsis": "Description"}' | podio webform submit https://podio.com/webforms/30560419/2584779
+        podio webform submit https://podio.com/webforms/30560419/2584779 -f data.json --attach document.docx
+        podio webform submit https://podio.com/webforms/30560419/2584779 -f data.json -a file1.pdf -a file2.docx
+        echo '{"title": "Test"}' | podio webform submit https://podio.com/webforms/30560419/2584779
     """
     try:
         # Parse the webform URL
@@ -165,6 +268,16 @@ def submit_webform(
         print_info(f"Webform URL: {url}")
         print_info(f"App ID: {app_id}, Form ID: {form_id}")
 
+        # Validate attachment files exist
+        attachment_files = []
+        if attach:
+            for file_path in attach:
+                if not file_path.exists():
+                    print_error(f"Attachment file not found: {file_path}")
+                    raise typer.Exit(1)
+                attachment_files.append(file_path)
+            print_info(f"Attachments: {len(attachment_files)} file(s)")
+
         # Read field data from file or stdin
         if json_file:
             if not json_file.exists():
@@ -175,13 +288,14 @@ def submit_webform(
         else:
             # Read from stdin
             if sys.stdin.isatty():
-                print_error("No input provided. Use --json-file or pipe JSON to stdin")
-                raise typer.Exit(1)
-            try:
-                fields_data = json.load(sys.stdin)
-            except json.JSONDecodeError as e:
-                print_error(f"Invalid JSON from stdin: {e}")
-                raise typer.Exit(1)
+                # No stdin input - allow submission with just attachments or empty fields
+                fields_data = {}
+            else:
+                try:
+                    fields_data = json.load(sys.stdin)
+                except json.JSONDecodeError as e:
+                    print_error(f"Invalid JSON from stdin: {e}")
+                    raise typer.Exit(1)
 
         # Step 1: GET the webform page to extract CSRF token
         print_info("Fetching webform page for CSRF token...")
@@ -213,11 +327,39 @@ def submit_webform(
             "Referer": url,
         }
 
-        post_response = session.post(
-            url,
-            data=form_data,
-            headers=headers,
-        )
+        # Build files for multipart upload if attachments provided
+        files_to_upload = None
+        if attachment_files:
+            # Use multipart/form-data with files
+            # Format: list of tuples (field_name, (filename, file_object, content_type))
+            files_to_upload = []
+            for file_path in attachment_files:
+                files_to_upload.append(
+                    ('attachments[]', (file_path.name, open(file_path, 'rb'), 'application/octet-stream'))
+                )
+
+        try:
+            if files_to_upload:
+                # Multipart form data with files
+                post_response = session.post(
+                    url,
+                    data=form_data,
+                    files=files_to_upload,
+                    headers=headers,
+                )
+            else:
+                # Regular form data without files
+                post_response = session.post(
+                    url,
+                    data=form_data,
+                    headers=headers,
+                )
+        finally:
+            # Close any opened file handles
+            if files_to_upload:
+                for _, file_tuple in files_to_upload:
+                    if hasattr(file_tuple[1], 'close'):
+                        file_tuple[1].close()
 
         # Check response
         if post_response.status_code == 200:
@@ -265,7 +407,11 @@ def submit_webform(
 
 @field_app.command("add")
 def add_field_to_webform(
-    form_id: int = typer.Argument(..., help="Webform ID"),
+    form_id_or_url: str = typer.Argument(
+        ...,
+        help="Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)",
+        metavar="FORM_ID_OR_URL",
+    ),
     field_id: int = typer.Argument(..., help="Field ID to add to the webform"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
@@ -274,11 +420,19 @@ def add_field_to_webform(
 
     Adds an app field to the webform so it appears on the public form.
 
+    The FORM_ID_OR_URL can be either:
+      - A numeric form ID (e.g., 2584779)
+      - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)
+
+    Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number.
+
     Examples:
         podio webform field add 2584779 275324144
+        podio webform field add https://podio.com/webforms/12345/2584779 275324144
         podio webform field add 2584779 275324144 --table
     """
     try:
+        form_id = _parse_form_id(form_id_or_url)
         client = get_client()
 
         # Get current webform configuration
@@ -312,6 +466,8 @@ def add_field_to_webform(
         formatted = format_response(result)
         print_output(formatted, table=table)
 
+    except typer.BadParameter:
+        raise
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -319,7 +475,11 @@ def add_field_to_webform(
 
 @field_app.command("remove")
 def remove_field_from_webform(
-    form_id: int = typer.Argument(..., help="Webform ID"),
+    form_id_or_url: str = typer.Argument(
+        ...,
+        help="Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)",
+        metavar="FORM_ID_OR_URL",
+    ),
     field_id: int = typer.Argument(..., help="Field ID to remove from the webform"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
@@ -328,11 +488,19 @@ def remove_field_from_webform(
 
     Removes an app field from the webform so it no longer appears on the public form.
 
+    The FORM_ID_OR_URL can be either:
+      - A numeric form ID (e.g., 2584779)
+      - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)
+
+    Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number.
+
     Examples:
         podio webform field remove 2584779 275324144
+        podio webform field remove https://podio.com/webforms/12345/2584779 275324144
         podio webform field remove 2584779 275324144 --table
     """
     try:
+        form_id = _parse_form_id(form_id_or_url)
         client = get_client()
 
         # Get current webform configuration
@@ -365,6 +533,8 @@ def remove_field_from_webform(
         formatted = format_response(result)
         print_output(formatted, table=table)
 
+    except typer.BadParameter:
+        raise
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -372,7 +542,11 @@ def remove_field_from_webform(
 
 @field_app.command("list")
 def list_webform_fields(
-    form_id: int = typer.Argument(..., help="Webform ID"),
+    form_id_or_url: str = typer.Argument(
+        ...,
+        help="Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)",
+        metavar="FORM_ID_OR_URL",
+    ),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
@@ -380,11 +554,19 @@ def list_webform_fields(
 
     Shows the field IDs currently configured on the webform.
 
+    The FORM_ID_OR_URL can be either:
+      - A numeric form ID (e.g., 2584779)
+      - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)
+
+    Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number.
+
     Examples:
         podio webform field list 2584779
+        podio webform field list https://podio.com/webforms/12345/2584779
         podio webform field list 2584779 --table
     """
     try:
+        form_id = _parse_form_id(form_id_or_url)
         client = get_client()
         result = client.transport.GET(url=f"/form/{form_id}")
 
@@ -401,6 +583,157 @@ def list_webform_fields(
         formatted = format_response(output)
         print_output(formatted, table=table)
 
+    except typer.BadParameter:
+        raise
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+def _update_webform_attachments(form_id: int, enabled: bool) -> dict:
+    """Update the attachments setting on a webform.
+
+    Args:
+        form_id: The webform ID
+        enabled: Whether attachments should be enabled
+
+    Returns:
+        The updated webform data
+    """
+    client = get_client()
+
+    # Get current webform configuration
+    current_form = client.transport.GET(url=f"/form/{form_id}")
+
+    # Build update payload with new attachments setting
+    update_data = {
+        'settings': current_form.get('settings', {}),
+        'domains': current_form.get('domains', []),
+        'fields': current_form.get('fields', []),
+        'attachments': enabled,
+    }
+
+    # Update the webform
+    result = client.transport.PUT(
+        url=f"/form/{form_id}",
+        body=json.dumps(update_data),
+        type='application/json'
+    )
+
+    return result
+
+
+@attachments_app.command("enable")
+def enable_attachments(
+    form_id_or_url: str = typer.Argument(
+        ...,
+        help="Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)",
+        metavar="FORM_ID_OR_URL",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Enable file attachments on a webform.
+
+    When enabled, users can attach files when submitting the webform.
+
+    The FORM_ID_OR_URL can be either:
+      - A numeric form ID (e.g., 2584779)
+      - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)
+
+    Examples:
+        podio webform attachments enable 2584779
+        podio webform attachments enable https://podio.com/webforms/12345/2584779
+    """
+    try:
+        form_id = _parse_form_id(form_id_or_url)
+        result = _update_webform_attachments(form_id, enabled=True)
+
+        print_success(f"File attachments enabled on webform {form_id}")
+        formatted = format_response(result)
+        print_output(formatted, table=table)
+
+    except typer.BadParameter:
+        raise
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@attachments_app.command("disable")
+def disable_attachments(
+    form_id_or_url: str = typer.Argument(
+        ...,
+        help="Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)",
+        metavar="FORM_ID_OR_URL",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Disable file attachments on a webform.
+
+    When disabled, users cannot attach files when submitting the webform.
+
+    The FORM_ID_OR_URL can be either:
+      - A numeric form ID (e.g., 2584779)
+      - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)
+
+    Examples:
+        podio webform attachments disable 2584779
+        podio webform attachments disable https://podio.com/webforms/12345/2584779
+    """
+    try:
+        form_id = _parse_form_id(form_id_or_url)
+        result = _update_webform_attachments(form_id, enabled=False)
+
+        print_success(f"File attachments disabled on webform {form_id}")
+        formatted = format_response(result)
+        print_output(formatted, table=table)
+
+    except typer.BadParameter:
+        raise
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@attachments_app.command("status")
+def attachments_status(
+    form_id_or_url: str = typer.Argument(
+        ...,
+        help="Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)",
+        metavar="FORM_ID_OR_URL",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Check if file attachments are enabled on a webform.
+
+    The FORM_ID_OR_URL can be either:
+      - A numeric form ID (e.g., 2584779)
+      - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)
+
+    Examples:
+        podio webform attachments status 2584779
+        podio webform attachments status https://podio.com/webforms/12345/2584779
+    """
+    try:
+        form_id = _parse_form_id(form_id_or_url)
+        client = get_client()
+        result = client.transport.GET(url=f"/form/{form_id}")
+
+        attachments_enabled = result.get('attachments', False)
+        output = {
+            'form_id': form_id,
+            'attachments_enabled': attachments_enabled,
+            'status': 'enabled' if attachments_enabled else 'disabled',
+        }
+
+        formatted = format_response(output)
+        print_output(formatted, table=table)
+
+    except typer.BadParameter:
+        raise
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
