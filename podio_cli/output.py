@@ -154,9 +154,9 @@ def print_table(data: Any, title: Optional[str] = None):
         box=box.HEAVY_HEAD,
     )
 
-    # Add columns - no_wrap=True for content-fitted columns
+    # Add columns - allow wrapping for long values
     for key in ordered_keys:
-        table.add_column(key, no_wrap=True)
+        table.add_column(key, no_wrap=False)
 
     # Add rows
     for item in data:
@@ -186,11 +186,7 @@ def _format_cell_value(value: Any) -> str:
     if isinstance(value, bool):
         return "✓" if value else "✗"
     if isinstance(value, (dict, list)):
-        # For complex types, truncate if too long
-        json_str = json.dumps(value, ensure_ascii=False)
-        if len(json_str) > 50:
-            return json_str[:47] + "..."
-        return json_str
+        return json.dumps(value, ensure_ascii=False)
     return str(value)
 
 
