@@ -16,6 +16,32 @@ field_app = typer.Typer(help="Manage application fields")
 app.add_typer(field_app, name="field")
 
 
+def _flatten_app(app_data: dict) -> dict:
+    """Flatten app data by promoting config fields to top level."""
+    if not isinstance(app_data, dict):
+        return app_data
+
+    result = {}
+    for key, value in app_data.items():
+        if key == "config" and isinstance(value, dict):
+            # Promote config fields to top level (config fields take precedence)
+            for config_key, config_value in value.items():
+                result[config_key] = config_value
+        else:
+            result[key] = value
+
+    return result
+
+
+def _flatten_apps(data: Any) -> Any:
+    """Flatten app list data by promoting config fields to top level."""
+    if isinstance(data, list):
+        return [_flatten_app(item) for item in data]
+    elif isinstance(data, dict):
+        return _flatten_app(data)
+    return data
+
+
 def _apply_properties_filter(data: Any, properties: str) -> Any:
     """Filter response data to include only specified properties."""
     if not properties:
@@ -153,7 +179,7 @@ def list_apps(
 
         client = get_client()
         result = client.Application.list_in_space(space_id=space_id)
-        formatted = format_response(result)
+        formatted = _flatten_apps(format_response(result))
 
         # Apply client-side filter if specified
         if filter:
@@ -576,15 +602,13 @@ def delete_field(
 @field_app.command("list")
 def list_fields(
     app_id: int = typer.Argument(..., help="Application ID"),
-    active_only: bool = typer.Option(True, "--active-only/--all", help="Show only active fields"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
-    List all fields in an application.
+    List all active fields in an application.
 
     Examples:
         podio app field list 12345
-        podio app field list 12345 --all
         podio app field list 12345 --table
     """
     try:
@@ -592,8 +616,7 @@ def list_fields(
         result = client.Application.find(app_id=app_id)
 
         fields = result.get('fields', [])
-        if active_only:
-            fields = [f for f in fields if f.get('status') == 'active']
+        fields = [f for f in fields if f.get('status') == 'active']
 
         # Format output
         output = []
