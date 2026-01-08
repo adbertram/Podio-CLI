@@ -127,6 +127,35 @@ def field_update(
         raise typer.Exit(exit_code)
 
 
+@app.command("get")
+def get_webhook(
+    hook_id: int = typer.Argument(..., help="Webhook ID to retrieve"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Get a Podio webhook by ID.
+
+    Returns webhook details including URL, status, and event type.
+
+    Note: The Podio API does not have a direct endpoint to get a single webhook.
+    This command uses the hook info endpoint which returns basic hook information.
+
+    Examples:
+        podio webhook get 12345
+        podio webhook get 12345 --table
+    """
+    try:
+        client = get_client()
+        # Podio doesn't have a direct get-by-id endpoint for hooks
+        # We use the transport to call the hook endpoint directly
+        result = client.transport.GET(url=f"/hook/{hook_id}")
+        formatted = format_response(result)
+        print_output(formatted, table=table)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
 @app.command("create")
 def create_webhook(
     hookable_type: str = typer.Argument(..., help="Type of object to hook (e.g., 'app', 'space')"),

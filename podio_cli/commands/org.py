@@ -86,3 +86,27 @@ def list_orgs(
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
+
+
+@app.command("get")
+def get_org(
+    org_id: int = typer.Argument(..., help="Organization ID to retrieve"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Get a Podio organization by ID.
+
+    Returns organization details including name, spaces, and member info.
+
+    Examples:
+        podio org get 12345
+        podio org get 12345 --table
+    """
+    try:
+        client = get_client()
+        result = client.Org.find(org_id=org_id)
+        formatted = format_response(result)
+        print_output(formatted, table=table)
+    except Exception as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
