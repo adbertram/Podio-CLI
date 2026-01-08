@@ -3,7 +3,7 @@ import typer
 import time
 import sys
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 from ..client import get_client
 from ..config import get_config
@@ -29,6 +29,51 @@ def _apply_properties_filter(data: Any, properties: str) -> Any:
         return [{k: v for k, v in item.items() if k in prop_list} for item in data]
 
     return data
+
+
+def _apply_client_filter(data: list, filters: list) -> list:
+    """Apply client-side filtering using field:op:value syntax."""
+    if not filters or not isinstance(data, list):
+        return data
+
+    result = data
+    for f in filters:
+        parts = f.split(":", 2)
+        if len(parts) < 2:
+            continue
+
+        field = parts[0]
+        if len(parts) == 2:
+            # field:value format (exact match)
+            op, value = "eq", parts[1]
+        else:
+            # field:op:value format
+            op, value = parts[1], parts[2]
+
+        filtered = []
+        for item in result:
+            item_value = item.get(field)
+            if item_value is None:
+                continue
+
+            # Convert to string for comparison
+            item_str = str(item_value).lower()
+            value_str = value.lower()
+
+            if op == "eq" and item_str == value_str:
+                filtered.append(item)
+            elif op == "ne" and item_str != value_str:
+                filtered.append(item)
+            elif op == "contains" and value_str in item_str:
+                filtered.append(item)
+            elif op == "gt" and item_str > value_str:
+                filtered.append(item)
+            elif op == "lt" and item_str < value_str:
+                filtered.append(item)
+
+        result = filtered
+
+    return result
 
 
 @app.command("get")
@@ -75,6 +120,7 @@ def get_app(
 def list_apps(
     space_id: Optional[int] = typer.Option(None, "--space-id", "-s", help="Space ID to list apps from (defaults to PODIO_WORKSPACE_ID)"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum apps to return"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter (field:op:value)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
@@ -83,10 +129,15 @@ def list_apps(
 
     If space_id is not provided, uses PODIO_WORKSPACE_ID from environment.
 
+    Filter examples:
+        --filter "status:active"
+        --filter "name:contains:Sales"
+
     Examples:
         podio app list --space-id 87654321
         podio app list  # Uses PODIO_WORKSPACE_ID
         podio app list --limit 10
+        podio app list --filter "status:active"
         podio app list --properties "app_id,name,link"
         podio app list --table
     """
@@ -103,6 +154,10 @@ def list_apps(
         client = get_client()
         result = client.Application.list_in_space(space_id=space_id)
         formatted = format_response(result)
+
+        # Apply client-side filter if specified
+        if filter:
+            formatted = _apply_client_filter(formatted, filter)
 
         # Apply limit (client-side)
         if isinstance(formatted, list) and len(formatted) > limit:
@@ -483,6 +538,7 @@ def delete_field(
     app_id: int = typer.Argument(..., help="Application ID"),
     field_id: int = typer.Argument(..., help="Field ID to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    delete_values: bool = typer.Option(False, "--delete-values", "-d", help="Also delete field values from existing items"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
@@ -493,19 +549,20 @@ def delete_field(
     Examples:
         podio app field delete 12345 67890
         podio app field delete 12345 67890 --force
+        podio app field delete 12345 67890 --delete-values
         podio app field delete 12345 67890 --table
     """
     try:
         if not force:
             confirm = typer.confirm(
-                "WARNING: Deleting a field will remove all data stored in it. Continue?"
+                "WARNING: Deleting a field will remove all data stored in it. Use --force to skip this prompt. Continue?"
             )
             if not confirm:
                 print("Aborted.", file=sys.stderr)
                 raise typer.Exit(0)
 
         client = get_client()
-        result = client.Application.delete_field(app_id=app_id, field_id=field_id)
+        result = client.Application.delete_field(app_id=app_id, field_id=field_id, delete_values=delete_values)
         formatted = format_response(result)
 
         print(f"✓ Field deleted successfully", file=sys.stderr)

@@ -251,7 +251,7 @@ class Application(Area):
         return self.transport.PUT(url='/app/%s/field/%s' % (app_id, field_id), body=attributes,
                                   type='application/json')
 
-    def delete_field(self, app_id, field_id):
+    def delete_field(self, app_id, field_id, delete_values=False):
         """
         Deletes a field from app with app_id
 
@@ -259,10 +259,13 @@ class Application(Area):
         :type app_id: str or int
         :param field_id: Field ID
         :type field_id: str or int
+        :param delete_values: If True, also delete field values from existing items
+        :type delete_values: bool
         :return: Python dict of JSON response
         :rtype: dict
         """
-        return self.transport.DELETE(url='/app/%s/field/%s' % (app_id, field_id))
+        delete_values_str = 'true' if delete_values else 'false'
+        return self.transport.DELETE(url='/app/%s/field/%s?delete_values=%s' % (app_id, field_id, delete_values_str))
 
     def deactivate(self, app_id):
         """
