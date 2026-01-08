@@ -120,6 +120,7 @@ def auth_login(
         "-t",
         help="Authentication type: 'client' (token, recommended) or 'server' (authorization code)"
     ),
+    force: bool = typer.Option(False, "--force", "-F", help="Clear existing session and re-authenticate"),
 ):
     """
     Initiate OAuth authentication flow.
@@ -130,8 +131,29 @@ def auth_login(
         podio auth login
         podio auth login --type client
         podio auth login --type server
+        podio auth login --force
     """
     config = get_config()
+
+    # Clear existing session if --force is specified
+    if force:
+        from dotenv import set_key
+        tokens_cleared = []
+
+        if config.access_token:
+            set_key(str(config.env_file_path), "PODIO_ACCESS_TOKEN", "")
+            tokens_cleared.append("PODIO_ACCESS_TOKEN")
+
+        if config.refresh_token:
+            set_key(str(config.env_file_path), "PODIO_REFRESH_TOKEN", "")
+            tokens_cleared.append("PODIO_REFRESH_TOKEN")
+
+        if config.authorization_code:
+            set_key(str(config.env_file_path), "PODIO_AUTHORIZATION_CODE", "")
+            tokens_cleared.append("PODIO_AUTHORIZATION_CODE")
+
+        if tokens_cleared:
+            typer.echo(f"Cleared existing session: {', '.join(tokens_cleared)}", err=True)
 
     # Check prerequisites
     if not config.client_id:
