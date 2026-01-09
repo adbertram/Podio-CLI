@@ -602,13 +602,17 @@ def delete_field(
 @field_app.command("list")
 def list_fields(
     app_id: int = typer.Argument(..., help="Application ID"),
+    include_deleted: bool = typer.Option(False, "--include-deleted", "-d", help="Include deleted fields"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
-    List all active fields in an application.
+    List all fields in an application.
+
+    By default, only active fields are shown. Use --include-deleted to show all fields.
 
     Examples:
         podio app field list 12345
+        podio app field list 12345 --include-deleted
         podio app field list 12345 --table
     """
     try:
@@ -616,18 +620,20 @@ def list_fields(
         result = client.Application.find(app_id=app_id)
 
         fields = result.get('fields', [])
-        fields = [f for f in fields if f.get('status') == 'active']
+        if not include_deleted:
+            fields = [f for f in fields if f.get('status') != 'deleted']
 
-        # Format output
+        # Format output with renamed/reordered columns
         output = []
         for field in fields:
             output.append({
-                'field_id': field.get('field_id'),
-                'label': field.get('label'),
+                'id': field.get('field_id'),
+                'display_name': field.get('label'),
+                'name': field.get('external_id'),
                 'type': field.get('type'),
-                'external_id': field.get('external_id'),
                 'status': field.get('status'),
                 'required': field.get('config', {}).get('required', False),
+                'deleted': field.get('status') == 'deleted',
             })
 
         print_output(output, table=table)

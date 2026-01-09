@@ -53,7 +53,7 @@ def _flatten_item(item: Dict) -> Dict:
     return flat
 
 
-def print_table(data: Any, title: Optional[str] = None):
+def print_table(data: Any, title: Optional[str] = None, columns: Optional[List[str]] = None):
     """
     Print data as a formatted table to stdout.
 
@@ -63,6 +63,7 @@ def print_table(data: Any, title: Optional[str] = None):
     Args:
         data: Data to output as table (list of dicts or single dict)
         title: Optional table title
+        columns: Optional list of column names to display in order (bypasses auto-ordering)
     """
     if data is None:
         console.print("[dim]No data[/dim]")
@@ -97,12 +98,16 @@ def print_table(data: Any, title: Optional[str] = None):
 
     # Define priority columns that should be shown first (most important)
     priority_columns = [
+        'id',  # Generic ID (for field list, etc.)
         'item_id', 'app_id', 'task_id', 'file_id', 'space_id', 'org_id', 'form_id',  # Primary IDs
         'app_item_id',  # Item sequence number
+        'display_name',  # Field display name
         'name', 'title', 'text',  # Names/content
-        'status',  # Status
-        'url_label',  # Short identifier
         'type',  # Type info
+        'status',  # Status
+        'required',  # Required flag
+        'deleted',  # Deleted flag
+        'url_label',  # Short identifier
     ]
     # Columns to hide by default (verbose data, use JSON for full output)
     hidden_columns = [
@@ -128,19 +133,24 @@ def print_table(data: Any, title: Optional[str] = None):
         'sharefile_vault_folder_id',  # ShareFile integration
     ]
 
-    # Reorder columns: priority first, then others (excluding hidden)
-    ordered_keys = []
-    for key in priority_columns:
-        if key in all_keys and key not in hidden_columns:
-            ordered_keys.append(key)
-    for key in all_keys:
-        if key not in ordered_keys and key not in hidden_columns:
-            ordered_keys.append(key)
+    # Use explicit columns if provided, otherwise auto-order
+    if columns:
+        # Use explicit column order (no filtering, no limit)
+        ordered_keys = [key for key in columns if key in all_keys]
+    else:
+        # Reorder columns: priority first, then others (excluding hidden)
+        ordered_keys = []
+        for key in priority_columns:
+            if key in all_keys and key not in hidden_columns:
+                ordered_keys.append(key)
+        for key in all_keys:
+            if key not in ordered_keys and key not in hidden_columns:
+                ordered_keys.append(key)
 
-    # Limit columns for readability - fewer is better
-    max_columns = 6
-    if len(ordered_keys) > max_columns:
-        ordered_keys = ordered_keys[:max_columns]
+        # Limit columns for readability - fewer is better
+        max_columns = 7
+        if len(ordered_keys) > max_columns:
+            ordered_keys = ordered_keys[:max_columns]
 
     if not ordered_keys:
         console.print("[dim]No data[/dim]")
