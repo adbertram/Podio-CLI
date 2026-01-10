@@ -796,7 +796,7 @@ podio webform get 2581518
 podio webform get 2581518 --table
 
 # Submit to a webform using the public URL
-echo '{"title": "My Title", "synopsis": "Description text"}' | podio webform submit "https://podio.com/webforms/30560419/2584779"
+echo '{"title": "My Title", "requested-description": "Description text"}' | podio webform submit "https://podio.com/webforms/30560419/2584779"
 
 # Submit from a JSON file
 podio webform submit "https://podio.com/webforms/30560419/2584779" -f data.json
@@ -808,7 +808,7 @@ Use field external_id as keys (matches the webform field names):
 ```json
 {
   "title": "My Title",
-  "synopsis": "Some description text",
+  "requested-description": "Some description text",
   "category": "Option 1"
 }
 ```
