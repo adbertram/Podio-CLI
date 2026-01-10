@@ -588,7 +588,11 @@ def delete_field(
                 raise typer.Exit(0)
 
         client = get_client()
-        result = client.Application.delete_field(app_id=app_id, field_id=field_id, delete_values=delete_values)
+        # Only pass delete_values if True (for backward compatibility with older pypodio2)
+        if delete_values:
+            result = client.Application.delete_field(app_id=app_id, field_id=field_id, delete_values=True)
+        else:
+            result = client.Application.delete_field(app_id=app_id, field_id=field_id)
         formatted = format_response(result)
 
         print(f"✓ Field deleted successfully", file=sys.stderr)
